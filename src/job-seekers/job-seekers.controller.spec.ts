@@ -1,0 +1,191 @@
+import { Test, TestingModule } from '@nestjs/testing';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { JobSeekersController } from './job-seekers.controller.js';
+import { JobSeekersService } from './job-seekers.service.js';
+import { AuthService } from '../auth/auth.service.js';
+
+describe('JobSeekersController', () => {
+  let controller: JobSeekersController;
+  let service: JobSeekersService;
+
+  const mockUser = {
+    id: 'user-1',
+    email: 'seeker@example.com',
+    name: 'Jane Doe',
+    role: 'job_seeker',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+
+  const mockProfile = {
+    id: 'profile-1',
+    userId: 'user-1',
+    headline: 'Senior Full Stack Engineer',
+    photoUrl: 'https://example.com/photo.jpg',
+    bio: 'Software specialist',
+    location: 'Addis Ababa, Ethiopia',
+    phone: '+251911000000',
+    cvUrl: 'https://example.com/cv.pdf',
+    languages: ['English', 'Amharic'],
+    education: [],
+    experience: [],
+    skills: [],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+
+  const mockJobSeekersService = {
+    getFullProfileByUserId: vi.fn(),
+    getFullProfileById: vi.fn(),
+    upsertProfile: vi.fn(),
+    searchTalent: vi.fn(),
+    getEducationList: vi.fn(),
+    addEducation: vi.fn(),
+    updateEducation: vi.fn(),
+    deleteEducation: vi.fn(),
+    getExperienceList: vi.fn(),
+    addExperience: vi.fn(),
+    updateExperience: vi.fn(),
+    deleteExperience: vi.fn(),
+    getAssignedSkills: vi.fn(),
+    assignSkill: vi.fn(),
+    batchAssignSkills: vi.fn(),
+    updateSkillAssignment: vi.fn(),
+    removeSkill: vi.fn(),
+  };
+
+  const mockAuthService = {
+    getSession: vi.fn(),
+  };
+
+  beforeEach(async () => {
+    const module: TestingModule = await Test.createTestingModule({
+      controllers: [JobSeekersController],
+      providers: [
+        { provide: JobSeekersService, useValue: mockJobSeekersService },
+        { provide: AuthService, useValue: mockAuthService },
+      ],
+    }).compile();
+
+    controller = module.get<JobSeekersController>(JobSeekersController);
+    service = module.get<JobSeekersService>(JobSeekersService);
+    vi.clearAllMocks();
+  });
+
+  describe('Profile Endpoints', () => {
+    it('should get current user profile', async () => {
+      mockJobSeekersService.getFullProfileByUserId.mockResolvedValue(mockProfile);
+
+      const res = await controller.getMyProfile(mockUser);
+      expect(res).toEqual(mockProfile);
+      expect(mockJobSeekersService.getFullProfileByUserId).toHaveBeenCalledWith('user-1');
+    });
+
+    it('should update current user profile', async () => {
+      mockJobSeekersService.upsertProfile.mockResolvedValue({
+        ...mockProfile,
+        bio: 'Updated bio',
+      });
+
+      const res = await controller.updateMyProfile(mockUser, { bio: 'Updated bio' });
+      expect(res.message).toBe('Profile updated successfully.');
+      expect(res.profile.bio).toBe('Updated bio');
+    });
+
+    it('should get public profile by id', async () => {
+      mockJobSeekersService.getFullProfileById.mockResolvedValue(mockProfile);
+
+      const res = await controller.getProfileById('profile-1');
+      expect(res).toEqual(mockProfile);
+    });
+
+    it('should search talent directory', async () => {
+      mockJobSeekersService.searchTalent.mockResolvedValue([mockProfile]);
+
+      const res = await controller.searchTalent('Full Stack', 'Addis Ababa', 10);
+      expect(res.count).toBe(1);
+      expect(res.jobSeekers).toEqual([mockProfile]);
+    });
+  });
+
+  describe('Education Endpoints', () => {
+    it('should add education record', async () => {
+      const mockEdu = { id: 'edu-1', institution: 'AAU', degree: 'BSc' };
+      mockJobSeekersService.addEducation.mockResolvedValue(mockEdu);
+
+      const res = await controller.addEducation(mockUser, {
+        institution: 'AAU',
+        degree: 'BSc',
+        startDate: '2020',
+      });
+
+      expect(res.message).toBe('Education record successfully added.');
+      expect(res.record).toEqual(mockEdu);
+    });
+
+    it('should list education records', async () => {
+      mockJobSeekersService.getEducationList.mockResolvedValue([{ id: 'edu-1' }]);
+
+      const res = await controller.getEducationList(mockUser);
+      expect(res.count).toBe(1);
+    });
+
+    it('should update education record', async () => {
+      mockJobSeekersService.updateEducation.mockResolvedValue({ id: 'edu-1', degree: 'MSc' });
+
+      const res = await controller.updateEducation(mockUser, 'edu-1', { degree: 'MSc' });
+      expect(res.record.degree).toBe('MSc');
+    });
+
+    it('should delete education record', async () => {
+      mockJobSeekersService.deleteEducation.mockResolvedValue({ success: true });
+
+      const res = await controller.deleteEducation(mockUser, 'edu-1');
+      expect(res.success).toBe(true);
+    });
+  });
+
+  describe('Experience Endpoints', () => {
+    it('should add experience record', async () => {
+      const mockExp = { id: 'exp-1', title: 'Engineer', company: 'ABC' };
+      mockJobSeekersService.addExperience.mockResolvedValue(mockExp);
+
+      const res = await controller.addExperience(mockUser, {
+        title: 'Engineer',
+        company: 'ABC',
+        startDate: '2022',
+      });
+
+      expect(res.message).toBe('Experience record successfully added.');
+      expect(res.record).toEqual(mockExp);
+    });
+
+    it('should delete experience record', async () => {
+      mockJobSeekersService.deleteExperience.mockResolvedValue({ success: true });
+
+      const res = await controller.deleteExperience(mockUser, 'exp-1');
+      expect(res.success).toBe(true);
+    });
+  });
+
+  describe('Skills Endpoints', () => {
+    it('should assign a skill', async () => {
+      const mockAssign = { skillId: 'skill-1', name: 'TypeScript', level: 'expert' };
+      mockJobSeekersService.assignSkill.mockResolvedValue(mockAssign);
+
+      const res = await controller.assignSkill(mockUser, {
+        skillId: 'skill-1',
+        level: 'expert',
+      });
+
+      expect(res).toEqual(mockAssign);
+    });
+
+    it('should remove a skill', async () => {
+      mockJobSeekersService.removeSkill.mockResolvedValue({ success: true });
+
+      const res = await controller.removeSkill(mockUser, 'skill-1');
+      expect(res.success).toBe(true);
+    });
+  });
+});

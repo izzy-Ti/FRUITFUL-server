@@ -6,6 +6,8 @@ import { AppService } from './app.service.js';
 import { appConfig, databaseConfig, authConfig } from './config/index.js';
 import { DatabaseModule } from './database/database.module.js';
 import { AuthModule } from './auth/auth.module.js';
+import { SkillsModule } from './skills/skills.module.js';
+import { JobSeekersModule } from './job-seekers/job-seekers.module.js';
 import { LoggerMiddleware } from './common/index.js';
 
 export const { ObserveModule, ObserveInstrument } = createObserveModule();
@@ -28,6 +30,8 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
       : []),
     DatabaseModule,
     AuthModule,
+    SkillsModule,
+    JobSeekersModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -8,3 +8,77 @@ model User {
   createdAt TimestamptzString @default(now())
   updatedAt temporal.updatedAtString()
 }
+
+model JobSeekerProfile {
+  id        String   @id
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  headline  String?
+  photoUrl  String?
+  bio       String?
+  location  String?
+  phone     String?
+  cvUrl     String?
+  languages String[]
+  createdAt TimestamptzString @default(now())
+  updatedAt temporal.updatedAtString()
+}
+
+model EducationRecord {
+  id           String   @id
+  profileId    String
+  profile      JobSeekerProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  institution  String
+  degree       String
+  fieldOfStudy String?
+  startDate    String
+  endDate      String?
+  isCurrent    Boolean  @default(false)
+  description  String?
+  createdAt    TimestamptzString @default(now())
+  updatedAt    temporal.updatedAtString()
+
+  @@index([profileId])
+}
+
+model ExperienceRecord {
+  id             String   @id
+  profileId      String
+  profile        JobSeekerProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  title          String
+  company        String
+  location       String?
+  employmentType String?
+  startDate      String
+  endDate        String?
+  isCurrent      Boolean  @default(false)
+  description    String?
+  createdAt      TimestamptzString @default(now())
+  updatedAt      temporal.updatedAtString()
+
+  @@index([profileId])
+}
+
+model Skill {
+  id        String   @id
+  name      String   @unique
+  category  String?
+  createdAt TimestamptzString @default(now())
+  updatedAt temporal.updatedAtString()
+}
+
+model ProfileSkill {
+  id                String   @id
+  profileId         String
+  profile           JobSeekerProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  skillId           String
+  skill             Skill            @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  level             String?
+  yearsOfExperience Int?
+  createdAt         TimestamptzString @default(now())
+  updatedAt         temporal.updatedAtString()
+
+  @@unique([profileId, skillId])
+  @@index([profileId])
+  @@index([skillId])
+}

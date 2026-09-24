@@ -1,0 +1,260 @@
+import {
+  Controller,
+  Get,
+  Put,
+  Post,
+  Delete,
+  Body,
+  Param,
+  Query,
+  UseGuards,
+  HttpCode,
+  HttpStatus,
+} from '@nestjs/common';
+import { JobSeekersService } from './job-seekers.service.js';
+import {
+  UpsertProfileDto,
+  CreateEducationDto,
+  UpdateEducationDto,
+  CreateExperienceDto,
+  UpdateExperienceDto,
+  AssignSkillDto,
+  BatchAssignSkillsDto,
+  UpdateSkillAssignmentDto,
+} from './dto/index.js';
+import { AuthGuard } from '../auth/guards/auth.guard.js';
+import { RolesGuard } from '../auth/guards/roles.guard.js';
+import { Roles } from '../auth/decorators/roles.decorator.js';
+import { CurrentUser } from '../auth/decorators/current-user.decorator.js';
+import { Role } from '../common/enums/role.enum.js';
+import type { AuthUser } from '../auth/auth.service.js';
+
+@Controller('job-seekers')
+export class JobSeekersController {
+  constructor(private readonly jobSeekersService: JobSeekersService) {}
+
+  // ==========================================
+  // PROFILE ENDPOINTS
+  // ==========================================
+
+  @Get('profile/me')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles(Role.JOB_SEEKER, Role.ADMIN)
+  async getMyProfile(@CurrentUser() user: AuthUser) {
+    return this.jobSeekersService.getFullProfileByUserId(user.id);
+  }
+
+  @Put('profile/me')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles(Role.JOB_SEEKER)
+  async updateMyProfile(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: UpsertProfileDto,
+  ) {
+    const profile = await this.jobSeekersService.upsertProfile(user.id, dto);
+    return {
+      message: 'Profile updated successfully.',
+      profile,
+    };
+  }
+
+  @Get('profile/:id')
+  @UseGuards(AuthGuard)
+  async getProfileById(@Param('id') id: string) {
+    return this.jobSeekersService.getFullProfileById(id);
+  }
+
+  @Get()
+  @UseGuards(AuthGuard)
+  async searchTalent(
+    @Query('search') search?: string,
+    @Query('location') location?: string,
+    @Query('limit') limit?: number,
+  ) {
+    const results = await this.jobSeekersService.searchTalent({
+      search,
+      location,
+      limit: limit ? Number(limit) : undefined,
+    });
+    return {
+      count: results.length,
+      jobSeekers: results,
+    };
+  }
+
+  // ==========================================
+  // EDUCATION ENDPOINTS
+  // ==========================================
+
+  @Get('education')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles(Role.JOB_SEEKER)
+  async getEducationList(@CurrentUser() user: AuthUser) {
+    const records = await this.jobSeekersService.getEducationList(user.id);
+    return {
+      count: records.length,
+      education: records,
+    };
+  }
+
+  @Post('education')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles(Role.JOB_SEEKER)
+  @HttpCode(HttpStatus.CREATED)
+  async addEducation(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: CreateEducationDto,
+  ) {
+    const record = await this.jobSeekersService.addEducation(user.id, dto);
+    return {
+      message: 'Education record successfully added.',
+      record,
+    };
+  }
+
+  @Put('education/:id')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles(Role.JOB_SEEKER)
+  async updateEducation(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() dto: UpdateEducationDto,
+  ) {
+    const record = await this.jobSeekersService.updateEducation(user.id, id, dto);
+    return {
+      message: 'Education record successfully updated.',
+      record,
+    };
+  }
+
+  @Delete('education/:id')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles(Role.JOB_SEEKER)
+  async deleteEducation(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+  ) {
+    return this.jobSeekersService.deleteEducation(user.id, id);
+  }
+
+  // ==========================================
+  // EXPERIENCE ENDPOINTS
+  // ==========================================
+
+  @Get('experience')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles(Role.JOB_SEEKER)
+  async getExperienceList(@CurrentUser() user: AuthUser) {
+    const records = await this.jobSeekersService.getExperienceList(user.id);
+    return {
+      count: records.length,
+      experience: records,
+    };
+  }
+
+  @Post('experience')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles(Role.JOB_SEEKER)
+  @HttpCode(HttpStatus.CREATED)
+  async addExperience(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: CreateExperienceDto,
+  ) {
+    const record = await this.jobSeekersService.addExperience(user.id, dto);
+    return {
+      message: 'Experience record successfully added.',
+      record,
+    };
+  }
+
+  @Put('experience/:id')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles(Role.JOB_SEEKER)
+  async updateExperience(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() dto: UpdateExperienceDto,
+  ) {
+    const record = await this.jobSeekersService.updateExperience(user.id, id, dto);
+    return {
+      message: 'Experience record successfully updated.',
+      record,
+    };
+  }
+
+  @Delete('experience/:id')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles(Role.JOB_SEEKER)
+  async deleteExperience(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+  ) {
+    return this.jobSeekersService.deleteExperience(user.id, id);
+  }
+
+  // ==========================================
+  // SKILLS ASSIGNMENT ENDPOINTS
+  // ==========================================
+
+  @Get('skills')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles(Role.JOB_SEEKER)
+  async getAssignedSkills(@CurrentUser() user: AuthUser) {
+    const skills = await this.jobSeekersService.getAssignedSkills(user.id);
+    return {
+      count: skills.length,
+      skills,
+    };
+  }
+
+  @Post('skills')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles(Role.JOB_SEEKER)
+  @HttpCode(HttpStatus.CREATED)
+  async assignSkill(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: AssignSkillDto,
+  ) {
+    return this.jobSeekersService.assignSkill(user.id, dto);
+  }
+
+  @Post('skills/batch')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles(Role.JOB_SEEKER)
+  @HttpCode(HttpStatus.CREATED)
+  async batchAssignSkills(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: BatchAssignSkillsDto,
+  ) {
+    const assignments = await this.jobSeekersService.batchAssignSkills(user.id, dto.skills);
+    return {
+      message: `${assignments.length} skills successfully processed.`,
+      assignments,
+    };
+  }
+
+  @Put('skills/:skillId')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles(Role.JOB_SEEKER)
+  async updateSkillAssignment(
+    @CurrentUser() user: AuthUser,
+    @Param('skillId') skillId: string,
+    @Body() dto: UpdateSkillAssignmentDto,
+  ) {
+    const updated = await this.jobSeekersService.updateSkillAssignment(user.id, skillId, dto);
+    return {
+      message: 'Skill assignment updated successfully.',
+      assignment: updated,
+    };
+  }
+
+  @Delete('skills/:skillId')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles(Role.JOB_SEEKER)
+  async removeSkill(
+    @CurrentUser() user: AuthUser,
+    @Param('skillId') skillId: string,
+  ) {
+    return this.jobSeekersService.removeSkill(user.id, skillId);
+  }
+}
