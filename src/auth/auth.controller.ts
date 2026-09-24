@@ -3,6 +3,7 @@ import {
   Post,
   Get,
   Body,
+  Query,
   Req,
   Res,
   HttpCode,
@@ -12,7 +13,15 @@ import {
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { AuthService } from './auth.service.js';
-import { RegisterDto, LoginDto, ForgotPasswordDto, ResetPasswordDto } from './dto/index.js';
+import {
+  RegisterDto,
+  LoginDto,
+  ForgotPasswordDto,
+  ResetPasswordDto,
+  SendVerificationEmailDto,
+  VerifyEmailDto,
+  GoogleAuthDto,
+} from './dto/index.js';
 
 @Controller('auth')
 export class AuthController {
@@ -137,6 +146,96 @@ export class AuthController {
 
     return {
       authenticated: true,
+      user: sessionData.user,
+      session: sessionData.session,
+    };
+  }
+
+  @Post(['send-verification-email', 'verification/send'])
+  @HttpCode(HttpStatus.OK)
+  async sendVerificationEmail(
+    @Body() dto: SendVerificationEmailDto,
+    @Req() req: Request,
+    @Headers('origin') headerOrigin?: string,
+  ) {
+    const origin = this.extractOrigin(req, headerOrigin);
+    return this.authService.sendVerificationEmail(dto, origin);
+  }
+
+  @Post('send-verification-otp')
+  @HttpCode(HttpStatus.OK)
+  async sendVerificationOtp(
+    @Body() dto: SendVerificationEmailDto,
+    @Req() req: Request,
+    @Headers('origin') headerOrigin?: string,
+  ) {
+    const origin = this.extractOrigin(req, headerOrigin);
+    return this.authService.sendVerificationOtp(dto.email, origin);
+  }
+
+  @Post('verify-email')
+  @HttpCode(HttpStatus.OK)
+  async verifyEmail(
+    @Body() dto: VerifyEmailDto,
+    @Req() req: Request,
+    @Headers('origin') headerOrigin?: string,
+  ) {
+    const origin = this.extractOrigin(req, headerOrigin);
+    return this.authService.verifyEmail(dto, origin);
+  }
+
+  @Get('verify-email')
+  async verifyEmailGet(
+    @Query('token') token: string,
+    @Req() req: Request,
+    @Headers('origin') headerOrigin?: string,
+  ) {
+    const origin = this.extractOrigin(req, headerOrigin);
+    return this.authService.verifyEmail({ token }, origin);
+  }
+
+  @Get('google')
+  async googleAuth(
+    @Query('callbackURL') callbackURL: string | undefined,
+    @Query('redirect') redirectQuery: string | undefined,
+    @Req() req: Request,
+    @Res() res: Response,
+    @Headers('origin') headerOrigin?: string,
+  ) {
+    const origin = this.extractOrigin(req, headerOrigin);
+    const result = await this.authService.initiateGoogleAuth({ callbackURL }, origin);
+
+    if (redirectQuery === 'false' || req.headers.accept?.includes('application/json')) {
+      return res.json({ url: result.url });
+    }
+
+    return res.redirect(result.url);
+  }
+
+  @Post('google')
+  @HttpCode(HttpStatus.OK)
+  async googleAuthPost(
+    @Body() dto: GoogleAuthDto,
+    @Req() req: Request,
+    @Headers('origin') headerOrigin?: string,
+  ) {
+    const origin = this.extractOrigin(req, headerOrigin);
+    return this.authService.initiateGoogleAuth(dto, origin);
+  }
+
+  @Get(['callback/google', 'callback/:provider'])
+  async oauthCallback(
+    @Req() req: Request,
+    @Headers('origin') headerOrigin?: string,
+    @Headers('cookie') cookies?: string,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const origin = this.extractOrigin(req, headerOrigin);
+    const sessionData = await this.authService.getSession(cookies, authorization, origin);
+
+    return {
+      success: true,
+      message: 'OAuth sign-in completed successfully.',
       user: sessionData.user,
       session: sessionData.session,
     };

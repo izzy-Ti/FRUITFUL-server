@@ -23,6 +23,10 @@ describe('AuthController', () => {
     forgotPassword: vi.fn(),
     resetPassword: vi.fn(),
     getSession: vi.fn(),
+    sendVerificationEmail: vi.fn(),
+    sendVerificationOtp: vi.fn(),
+    verifyEmail: vi.fn(),
+    initiateGoogleAuth: vi.fn(),
   };
 
   beforeEach(async () => {
@@ -155,5 +159,103 @@ describe('AuthController', () => {
 
     expect(result.authenticated).toBe(true);
     expect(result.user.email).toBe('test@fruitful.example');
+  });
+
+  it('should send verification email', async () => {
+    mockAuthService.sendVerificationEmail.mockResolvedValue({
+      success: true,
+      message: 'Verification email sent. Please check your inbox.',
+    });
+
+    const mockReq = { headers: { host: 'localhost:3000' } } as any;
+
+    const result = await authController.sendVerificationEmail(
+      { email: 'test@fruitful.example' },
+      mockReq,
+    );
+
+    expect(result.success).toBe(true);
+    expect(result.message).toContain('Verification email sent');
+  });
+
+  it('should send verification OTP', async () => {
+    mockAuthService.sendVerificationOtp.mockResolvedValue({
+      success: true,
+      message: 'Verification code sent.',
+    });
+
+    const mockReq = { headers: { host: 'localhost:3000' } } as any;
+
+    const result = await authController.sendVerificationOtp(
+      { email: 'test@fruitful.example' },
+      mockReq,
+    );
+
+    expect(result.success).toBe(true);
+    expect(result.message).toBe('Verification code sent.');
+  });
+
+  it('should verify email with token', async () => {
+    mockAuthService.verifyEmail.mockResolvedValue({
+      success: true,
+      message: 'Email successfully verified.',
+      user: { ...mockUser, emailVerified: true },
+    });
+
+    const mockReq = { headers: { host: 'localhost:3000' } } as any;
+
+    const result = await authController.verifyEmail(
+      { token: 'valid-verify-token' },
+      mockReq,
+    );
+
+    expect(result.success).toBe(true);
+    expect(result.message).toBe('Email successfully verified.');
+  });
+
+  it('should initiate Google OAuth and redirect by default', async () => {
+    mockAuthService.initiateGoogleAuth.mockResolvedValue({
+      url: 'https://oauth2.google.com/auth?...',
+      redirect: true,
+    });
+
+    const mockReq = { headers: { host: 'localhost:3000' } } as any;
+    const mockRes = { redirect: vi.fn(), json: vi.fn() } as any;
+
+    await authController.googleAuth(undefined, undefined, mockReq, mockRes);
+
+    expect(mockRes.redirect).toHaveBeenCalledWith('https://oauth2.google.com/auth?...');
+  });
+
+  it('should return Google OAuth url as JSON when requested', async () => {
+    mockAuthService.initiateGoogleAuth.mockResolvedValue({
+      url: 'https://oauth2.google.com/auth?...',
+      redirect: true,
+    });
+
+    const mockReq = { headers: { host: 'localhost:3000' } } as any;
+    const mockRes = { redirect: vi.fn(), json: vi.fn() } as any;
+
+    await authController.googleAuth(undefined, 'false', mockReq, mockRes);
+
+    expect(mockRes.json).toHaveBeenCalledWith({ url: 'https://oauth2.google.com/auth?...' });
+  });
+
+  it('should handle OAuth callback', async () => {
+    mockAuthService.getSession.mockResolvedValue({
+      user: mockUser,
+      session: { id: 'sess-oauth', userId: 'user-123' },
+    });
+
+    const mockReq = { headers: { host: 'localhost:3000' } } as any;
+
+    const result = await authController.oauthCallback(
+      mockReq,
+      'http://localhost:3000',
+      'cookie',
+    );
+
+    expect(result.success).toBe(true);
+    expect(result.message).toContain('OAuth sign-in completed successfully');
   });
 });

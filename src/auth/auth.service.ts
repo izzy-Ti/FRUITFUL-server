@@ -7,7 +7,15 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as jose from 'jose';
-import { RegisterDto, LoginDto, ForgotPasswordDto, ResetPasswordDto } from './dto/index.js';
+import {
+  RegisterDto,
+  LoginDto,
+  ForgotPasswordDto,
+  ResetPasswordDto,
+  SendVerificationEmailDto,
+  VerifyEmailDto,
+  GoogleAuthDto,
+} from './dto/index.js';
 
 export interface AuthResponse<T = any> {
   data: T;
@@ -296,5 +304,116 @@ export class AuthService {
       this.logger.warn(`JWT verification failed: ${err}`);
       return null;
     }
+  }
+
+  /**
+   * Send an email verification link or code to the user's email address.
+   */
+  async sendVerificationEmail(
+    dto: SendVerificationEmailDto,
+    origin?: string,
+  ): Promise<{ success: boolean; message: string }> {
+    await this.requestNeonAuth('/send-verification-email', {
+      body: {
+        email: dto.email,
+      },
+      origin,
+    });
+
+    return {
+      success: true,
+      message: 'Verification email sent. Please check your inbox.',
+    };
+  }
+
+  /**
+   * Send an email verification OTP code.
+   */
+  async sendVerificationOtp(
+    email: string,
+    origin?: string,
+  ): Promise<{ success: boolean; message: string }> {
+    await this.requestNeonAuth('/email-otp/send-verification-otp', {
+      body: {
+        email,
+        type: 'email-verification',
+      },
+      origin,
+    });
+
+    return {
+      success: true,
+      message: 'Verification code sent. Please check your inbox.',
+    };
+  }
+
+  /**
+   * Verify an email address using either a link token or an OTP code.
+   */
+  async verifyEmail(
+    dto: VerifyEmailDto,
+    origin?: string,
+  ): Promise<{ success: boolean; message: string; user?: AuthUser }> {
+    if (dto.token) {
+      const result = await this.requestNeonAuth<{ status: boolean; user?: AuthUser }>(
+        `/verify-email?token=${encodeURIComponent(dto.token)}`,
+        {
+          method: 'GET',
+          origin,
+        },
+      );
+      return {
+        success: true,
+        message: 'Email successfully verified.',
+        user: result.data.user,
+      };
+    }
+
+    if (dto.email && dto.otp) {
+      const result = await this.requestNeonAuth<{ user?: AuthUser }>(
+        '/email-otp/verify-email',
+        {
+          body: {
+            email: dto.email,
+            otp: dto.otp,
+          },
+          origin,
+        },
+      );
+      return {
+        success: true,
+        message: 'Email successfully verified.',
+        user: result.data.user,
+      };
+    }
+
+    throw new BadRequestException(
+      'Either a verification token or an email + OTP code must be provided.',
+    );
+  }
+
+  /**
+   * Initiate Google OAuth sign-in flow via Neon Auth.
+   * Returns the OAuth authorization redirect URL.
+   */
+  async initiateGoogleAuth(
+    dto: GoogleAuthDto,
+    origin?: string,
+  ): Promise<{ url: string; redirect: boolean }> {
+    const callbackURL =
+      dto.callbackURL || `${origin || this.defaultOrigin}/auth/callback/google`;
+
+    const result = await this.requestNeonAuth<{ url: string; redirect: boolean }>(
+      '/sign-in/social',
+      {
+        body: {
+          provider: 'google',
+          callbackURL,
+        },
+        origin,
+      },
+    );
+
+    return result.data;
   }
 }
