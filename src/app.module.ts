@@ -1,19 +1,30 @@
 import { Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
 import { createObserveModule } from '@nestjs/observe';
 import { AppController } from './app.controller.js';
 import { AppService } from './app.service.js';
+import { appConfig, databaseConfig, authConfig } from './config/index.js';
+import { DatabaseModule } from './database/database.module.js';
 
 export const { ObserveModule, ObserveInstrument } = createObserveModule();
 
 @Module({
   imports: [
-    // Distributed tracing, auto-correlated logs, request/job metrics, error
-    // telemetry, alarms, and more — out of the box. Sign up at https://observe.nestjs.com
-    ObserveModule.forRoot({
-      appKey: 'YOUR_APP_KEY',
-      appSecret: 'YOUR_APP_SECRET',
-      serviceId: 'server',
+    ConfigModule.forRoot({
+      isGlobal: true,
+      load: [appConfig, databaseConfig, authConfig],
+      envFilePath: ['.env.local', '.env'],
     }),
+    ...(process.env.OBSERVE_APP_KEY && process.env.OBSERVE_APP_SECRET
+      ? [
+          ObserveModule.forRoot({
+            appKey: process.env.OBSERVE_APP_KEY,
+            appSecret: process.env.OBSERVE_APP_SECRET,
+            serviceId: 'server',
+          }),
+        ]
+      : []),
+    DatabaseModule,
   ],
   controllers: [AppController],
   providers: [AppService],
