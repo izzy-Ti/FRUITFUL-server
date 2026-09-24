@@ -2,16 +2,17 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { JobsController } from './jobs.controller.js';
 import { JobsService } from './jobs.service.js';
-import { AuthService } from '../auth/auth.service.js';
+import { AuthService, type AuthUser } from '../auth/auth.service.js';
 
 describe('JobsController', () => {
   let controller: JobsController;
   let service: JobsService;
 
-  const mockUser = {
+  const mockUser: AuthUser = {
     id: 'user-emp-1',
     email: 'employer@fruitful.com',
     name: 'Tech Inc',
+    emailVerified: true,
     role: 'employer',
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),

@@ -2,7 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { StorageController } from './storage.controller.js';
 import { StorageService } from './storage.service.js';
-import { AuthService } from '../auth/auth.service.js';
+import { AuthService, type AuthUser } from '../auth/auth.service.js';
 import { BadRequestException } from '@nestjs/common';
 
 describe('StorageController', () => {
@@ -31,10 +31,14 @@ describe('StorageController', () => {
     vi.clearAllMocks();
   });
 
-  const mockUser = {
+  const mockUser: AuthUser = {
     id: 'user-1',
     email: 'user1@example.com',
+    name: 'Test Seeker',
+    emailVerified: true,
     role: 'job_seeker',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   };
 
   describe('uploadCv', () => {
