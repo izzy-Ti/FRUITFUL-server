@@ -24,6 +24,10 @@
       "model": "Job",
       "namespace": "public"
     },
+    "jobApplication": {
+      "model": "JobApplication",
+      "namespace": "public"
+    },
     "jobSeekerProfile": {
       "model": "JobSeekerProfile",
       "namespace": "public"
@@ -922,6 +926,151 @@
               },
               "namespaceId": "public",
               "table": "job"
+            }
+          },
+          "JobApplication": {
+            "fields": {
+              "appliedAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "coverLetter": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "cvUrl": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "employerNotes": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "jobId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "portfolioLinks": {
+                "many": true,
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "profileId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "status": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "updatedAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              }
+            },
+            "relations": {
+              "job": {
+                "cardinality": "N:1",
+                "nullable": false,
+                "on": {
+                  "localFields": [
+                    "jobId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "Job",
+                  "namespace": "public"
+                }
+              },
+              "profile": {
+                "cardinality": "N:1",
+                "nullable": false,
+                "on": {
+                  "localFields": [
+                    "profileId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "JobSeekerProfile",
+                  "namespace": "public"
+                }
+              }
+            },
+            "storage": {
+              "fields": {
+                "appliedAt": {
+                  "column": "appliedAt"
+                },
+                "coverLetter": {
+                  "column": "coverLetter"
+                },
+                "cvUrl": {
+                  "column": "cvUrl"
+                },
+                "employerNotes": {
+                  "column": "employerNotes"
+                },
+                "id": {
+                  "column": "id"
+                },
+                "jobId": {
+                  "column": "jobId"
+                },
+                "portfolioLinks": {
+                  "column": "portfolioLinks"
+                },
+                "profileId": {
+                  "column": "profileId"
+                },
+                "status": {
+                  "column": "status"
+                },
+                "updatedAt": {
+                  "column": "updatedAt"
+                }
+              },
+              "namespaceId": "public",
+              "table": "jobApplication"
             }
           },
           "JobSeekerProfile": {
@@ -2239,6 +2388,151 @@
               },
               "uniques": []
             },
+            "jobApplication": {
+              "checks": [
+                {
+                  "expression": "array_position(\"portfolioLinks\", NULL) IS NULL",
+                  "name": "jobApplication_portfolioLinks_elem_not_null_c46eefb2",
+                  "prefix": "jobApplication_portfolioLinks_elem_not_null"
+                }
+              ],
+              "columns": {
+                "appliedAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "default": {
+                    "expression": "now()",
+                    "kind": "function"
+                  },
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                },
+                "coverLetter": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "cvUrl": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "employerNotes": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "id": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "jobId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "portfolioLinks": {
+                  "codecId": "pg/text@1",
+                  "many": true,
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "profileId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "status": {
+                  "codecId": "pg/text@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": "submitted"
+                  },
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "updatedAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                }
+              },
+              "foreignKeys": [
+                {
+                  "onDelete": "cascade",
+                  "source": {
+                    "columns": [
+                      "jobId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "jobApplication"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "job"
+                  }
+                },
+                {
+                  "onDelete": "cascade",
+                  "source": {
+                    "columns": [
+                      "profileId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "jobApplication"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "jobSeekerProfile"
+                  }
+                }
+              ],
+              "indexes": [
+                {
+                  "columns": [
+                    "jobId"
+                  ],
+                  "name": "jobApplication_jobId_idx_623c8f77",
+                  "prefix": "jobApplication_jobId_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "profileId"
+                  ],
+                  "name": "jobApplication_profileId_idx_d9cdfcaf",
+                  "prefix": "jobApplication_profileId_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "status"
+                  ],
+                  "name": "jobApplication_status_idx_e98638ab",
+                  "prefix": "jobApplication_status_idx",
+                  "unique": false
+                }
+              ],
+              "primaryKey": {
+                "columns": [
+                  "id"
+                ]
+              },
+              "uniques": [
+                {
+                  "columns": [
+                    "jobId",
+                    "profileId"
+                  ]
+                }
+              ]
+            },
             "jobSeekerProfile": {
               "checks": [
                 {
@@ -2783,10 +3077,10 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "cc49ebb534576575280d63622e2e70bc77a7dbf88cb39c62171d6899fa51c972"
+    "storageHash": "88c81325afde109e996093a1f6d37606d0fa7d2f0f1f6f190ab0c978e1cf267d"
   },
   "execution": {
-    "executionHash": "b615d4a8a15c4c659ea178d1355c1285b1b08f0041256ee630a3730fee94e748",
+    "executionHash": "e28fbdd5e7f41d93e8261bc619ac194ed5b6e6f504166905f42afb59c0b91bdf",
     "mutations": {
       "defaults": [
         {
@@ -2862,6 +3156,21 @@
             "column": "updatedAt",
             "namespace": "public",
             "table": "job"
+          }
+        },
+        {
+          "onCreate": {
+            "id": "timestampNow",
+            "kind": "generator"
+          },
+          "onUpdate": {
+            "id": "timestampNow",
+            "kind": "generator"
+          },
+          "ref": {
+            "column": "updatedAt",
+            "namespace": "public",
+            "table": "jobApplication"
           }
         },
         {

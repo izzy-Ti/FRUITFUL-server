@@ -188,3 +188,23 @@ model Job {
   @@index([workplaceType])
   @@index([category])
 }
+
+model JobApplication {
+  id             String   @id
+  jobId          String
+  job            Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  profileId      String
+  profile        JobSeekerProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  status         String   @default("submitted")
+  coverLetter    String?
+  cvUrl          String?
+  portfolioLinks String[]
+  employerNotes  String?
+  appliedAt      TimestamptzString @default(now())
+  updatedAt      temporal.updatedAtString()
+
+  @@unique([jobId, profileId])
+  @@index([jobId])
+  @@index([profileId])
+  @@index([status])
+}

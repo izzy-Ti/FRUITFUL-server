@@ -11,6 +11,7 @@ import { JobSeekersModule } from './job-seekers/job-seekers.module.js';
 import { EmployersModule } from './employers/employers.module.js';
 import { StorageModule } from './storage/storage.module.js';
 import { JobsModule } from './jobs/jobs.module.js';
+import { ApplicationsModule } from './applications/applications.module.js';
 import { LoggerMiddleware } from './common/index.js';
 
 export const { ObserveModule, ObserveInstrument } = createObserveModule();
@@ -38,6 +39,7 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
     EmployersModule,
     StorageModule,
     JobsModule,
+    ApplicationsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

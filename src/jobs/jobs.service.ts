@@ -41,6 +41,10 @@ export interface FullJob {
   closedAt: string | null;
   deadline: string | null;
   employer?: EmployerSummary | null;
+  applicationCount?: number;
+  hasApplied?: boolean;
+  applicationId?: string | null;
+  applicationStatus?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -445,7 +449,35 @@ export class JobsService {
 
     // Published jobs are visible to everyone
     if (job.status === 'published') {
-      return this.assembleJob(job);
+      const assembled = await this.assembleJob(job);
+      if (currentUser?.role === 'job_seeker') {
+        const profile = await this.prisma.client.orm.public.JobSeekerProfile
+          .where({ userId: currentUser.id })
+          .first();
+
+        if (profile) {
+          const app = await this.prisma.client.orm.public.JobApplication
+            .where({ jobId: job.id, profileId: profile.id })
+            .first();
+
+          if (app && app.status !== 'withdrawn') {
+            assembled.hasApplied = true;
+            assembled.applicationId = app.id;
+            assembled.applicationStatus = app.status;
+          } else {
+            assembled.hasApplied = false;
+          }
+        }
+      }
+
+      if (currentUser?.role === 'admin' || currentUser?.role === 'employer') {
+        const apps = await this.prisma.client.orm.public.JobApplication
+          .where({ jobId: job.id })
+          .all();
+        assembled.applicationCount = apps.length;
+      }
+
+      return assembled;
     }
 
     // Non-published jobs (draft, closed, archived) require authentication
@@ -455,7 +487,12 @@ export class JobsService {
 
     // Admins can view any job
     if (currentUser.role === 'admin') {
-      return this.assembleJob(job);
+      const assembled = await this.assembleJob(job);
+      const apps = await this.prisma.client.orm.public.JobApplication
+        .where({ jobId: job.id })
+        .all();
+      assembled.applicationCount = apps.length;
+      return assembled;
     }
 
     // Employer who owns the job can view it
@@ -465,7 +502,12 @@ export class JobsService {
         .first();
 
       if (employer && employer.id === job.employerId) {
-        return this.assembleJob(job);
+        const assembled = await this.assembleJob(job);
+        const apps = await this.prisma.client.orm.public.JobApplication
+          .where({ jobId: job.id })
+          .all();
+        assembled.applicationCount = apps.length;
+        return assembled;
       }
     }
 
