@@ -324,6 +324,8 @@ export class ApplicationsService {
       throw new BadRequestException('Cannot withdraw an application that has already been accepted/hired.');
     }
 
+    const previousStatus = application.status;
+
     await this.prisma.client.orm.public.JobApplication
       .where({ id: applicationId })
       .update({
@@ -332,7 +334,7 @@ export class ApplicationsService {
 
     await this.recordStatusChange(
       application.id,
-      application.status,
+      previousStatus,
       'withdrawn',
       userId,
       'job_seeker',
@@ -466,6 +468,8 @@ export class ApplicationsService {
       }
     }
 
+    const previousStatus = application.status;
+
     await this.prisma.client.orm.public.JobApplication
       .where({ id: applicationId })
       .update({
@@ -473,10 +477,10 @@ export class ApplicationsService {
         employerNotes: dto.employerNotes !== undefined ? dto.employerNotes : application.employerNotes,
       });
 
-    if (application.status !== dto.status) {
+    if (previousStatus !== dto.status) {
       await this.recordStatusChange(
         application.id,
-        application.status,
+        previousStatus,
         dto.status,
         userId,
         isAdmin ? 'admin' : 'employer',
