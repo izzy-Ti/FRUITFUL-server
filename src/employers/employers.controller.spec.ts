@@ -44,6 +44,7 @@ describe('EmployersController', () => {
     getProfileById: vi.fn(),
     findAllAdmin: vi.fn(),
     updateVerificationStatus: vi.fn(),
+    getVerificationHistory: vi.fn(),
   };
 
   const mockAuthService = {
@@ -100,6 +101,19 @@ describe('EmployersController', () => {
     });
   });
 
+  describe('getMyVerificationHistory', () => {
+    it('should return verification history for employer', async () => {
+      mockEmployersService.getMyProfile.mockResolvedValue(mockEmployerProfile);
+      mockEmployersService.getVerificationHistory.mockResolvedValue([
+        { id: 'v-1', employerId: 'emp-1', status: 'pending' },
+      ]);
+
+      const res = await controller.getMyVerificationHistory(mockUser);
+      expect(res.employerId).toBe('emp-1');
+      expect(res.history).toHaveLength(1);
+    });
+  });
+
   describe('findAll and findOne', () => {
     it('should list verified employers', async () => {
       mockEmployersService.findAll.mockResolvedValue([mockEmployerProfile]);
@@ -131,12 +145,23 @@ describe('EmployersController', () => {
         verificationStatus: 'verified',
       });
 
-      const res = await controller.updateVerification('emp-1', {
+      const res = await controller.updateVerification(mockUser, 'emp-1', {
         status: 'verified',
       });
 
       expect(res.message).toContain('status updated to "verified"');
       expect(res.profile.verificationStatus).toBe('verified');
+      expect(mockEmployersService.updateVerificationStatus).toHaveBeenCalledWith('emp-1', { status: 'verified' }, 'user-emp-1');
+    });
+
+    it('should get verification history for admin', async () => {
+      mockEmployersService.getVerificationHistory.mockResolvedValue([
+        { id: 'v-1', employerId: 'emp-1', status: 'verified' },
+      ]);
+
+      const res = await controller.getAdminVerificationHistory('emp-1');
+      expect(res.employerId).toBe('emp-1');
+      expect(res.history).toHaveLength(1);
     });
   });
 });

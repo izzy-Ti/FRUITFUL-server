@@ -1,8 +1,9 @@
-import { Injectable, Logger, BadRequestException, InternalServerErrorException } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException, NotFoundException, InternalServerErrorException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { v2 as cloudinary, UploadApiResponse } from 'cloudinary';
 import { Readable } from 'node:stream';
 import { randomUUID } from 'node:crypto';
+import { PrismaService } from '../database/prisma.service.js';
 
 export interface UploadedFile {
   fieldname?: string;
@@ -16,6 +17,22 @@ export interface UploadedFile {
   path?: string;
 }
 
+export interface FileMetadataRecord {
+  id: string;
+  uploadedById: string | null;
+  fileName: string;
+  originalName: string;
+  mimeType: string;
+  size: number;
+  url: string;
+  secureUrl: string | null;
+  publicId: string | null;
+  entityType: string | null;
+  entityId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface StorageUploadResult {
   url: string;
   secureUrl: string;
@@ -24,6 +41,7 @@ export interface StorageUploadResult {
   bytes?: number;
   originalFilename?: string;
   resourceType: string;
+  metadata?: FileMetadataRecord;
 }
 
 @Injectable()
@@ -32,7 +50,10 @@ export class StorageService {
   private readonly isConfigured: boolean;
   private readonly defaultFolder: string;
 
-  constructor(private readonly configService: ConfigService) {
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly prisma: PrismaService,
+  ) {
     const cloudName = this.configService.get<string>('storage.cloudinary.cloudName');
     const apiKey = this.configService.get<string>('storage.cloudinary.apiKey');
     const apiSecret = this.configService.get<string>('storage.cloudinary.apiSecret');
@@ -62,7 +83,7 @@ export class StorageService {
   }
 
   /**
-   * Upload a file buffer to Cloudinary.
+   * Upload a file buffer to Cloudinary and record file metadata in database.
    */
   async uploadBuffer(
     file: UploadedFile,
@@ -71,6 +92,11 @@ export class StorageService {
       resourceType?: 'image' | 'raw' | 'auto' | 'video';
       allowedMimeTypes?: string[];
       maxSizeBytes?: number;
+      uploadedById?: string | null;
+      entityType?: string;
+      entityId?: string | null;
+      fileName?: string;
+      saveMetadata?: boolean;
     } = {},
   ): Promise<StorageUploadResult> {
     if (!file || !file.buffer) {
@@ -100,6 +126,16 @@ export class StorageService {
     const folder = options.folder ? `${this.defaultFolder}/${options.folder}` : this.defaultFolder;
     const resourceType = options.resourceType || 'auto';
 
+    let uploadResult: {
+      url: string;
+      secureUrl: string;
+      publicId: string;
+      format?: string;
+      bytes?: number;
+      originalFilename?: string;
+      resourceType: string;
+    };
+
     // Mock/development fallback if Cloudinary credentials are not provided
     if (!this.isConfigured) {
       const mockId = `mock_${randomUUID()}`;
@@ -110,7 +146,7 @@ export class StorageService {
         `[MOCK STORAGE] Stored "${file.originalname}" (${file.size} bytes) -> ${mockUrl}`,
       );
 
-      return {
+      uploadResult = {
         url: mockUrl,
         secureUrl: mockUrl,
         publicId: `${folder}/${mockId}`,
@@ -119,41 +155,106 @@ export class StorageService {
         originalFilename: file.originalname,
         resourceType,
       };
+    } else {
+      uploadResult = await new Promise<{
+        url: string;
+        secureUrl: string;
+        publicId: string;
+        format?: string;
+        bytes?: number;
+        originalFilename?: string;
+        resourceType: string;
+      }>((resolve, reject) => {
+        const uploadStream = cloudinary.uploader.upload_stream(
+          {
+            folder,
+            resource_type: resourceType,
+            use_filename: true,
+            unique_filename: true,
+          },
+          (error, result?: UploadApiResponse) => {
+            if (error || !result) {
+              this.logger.error('Cloudinary upload error:', error);
+              return reject(
+                new InternalServerErrorException(
+                  error?.message || 'Failed to upload asset to Cloudinary.',
+                ),
+              );
+            }
+
+            resolve({
+              url: result.url,
+              secureUrl: result.secure_url,
+              publicId: result.public_id,
+              format: result.format,
+              bytes: result.bytes,
+              originalFilename: file.originalname,
+              resourceType: result.resource_type,
+            });
+          },
+        );
+
+        const stream = Readable.from(file.buffer);
+        stream.pipe(uploadStream);
+      });
     }
 
-    return new Promise<StorageUploadResult>((resolve, reject) => {
-      const uploadStream = cloudinary.uploader.upload_stream(
-        {
-          folder,
-          resource_type: resourceType,
-          use_filename: true,
-          unique_filename: true,
-        },
-        (error, result?: UploadApiResponse) => {
-          if (error || !result) {
-            this.logger.error('Cloudinary upload error:', error);
-            return reject(
-              new InternalServerErrorException(
-                error?.message || 'Failed to upload asset to Cloudinary.',
-              ),
-            );
-          }
+    // Persist file metadata to database
+    let metadata: FileMetadataRecord | undefined;
+    if (options.saveMetadata !== false) {
+      try {
+        const created = await this.prisma.client.orm.public.FileMetadata.create({
+          id: randomUUID(),
+          uploadedById: options.uploadedById || null,
+          fileName: options.fileName || file.originalname,
+          originalName: file.originalname,
+          mimeType: file.mimetype,
+          size: file.size,
+          url: uploadResult.url,
+          secureUrl: uploadResult.secureUrl,
+          publicId: uploadResult.publicId,
+          entityType: options.entityType || 'general',
+          entityId: options.entityId || null,
+        });
+        metadata = created as unknown as FileMetadataRecord;
+      } catch (err) {
+        this.logger.warn('Failed to record FileMetadata in database:', err);
+      }
+    }
 
-          resolve({
-            url: result.url,
-            secureUrl: result.secure_url,
-            publicId: result.public_id,
-            format: result.format,
-            bytes: result.bytes,
-            originalFilename: file.originalname,
-            resourceType: result.resource_type,
-          });
-        },
-      );
+    return {
+      ...uploadResult,
+      metadata,
+    };
+  }
 
-      const stream = Readable.from(file.buffer);
-      stream.pipe(uploadStream);
-    });
+  /**
+   * Retrieve file metadata record by ID.
+   */
+  async getFileMetadata(id: string): Promise<FileMetadataRecord> {
+    const file = await this.prisma.client.orm.public.FileMetadata
+      .where({ id })
+      .first();
+
+    if (!file) {
+      throw new NotFoundException(`File metadata with ID "${id}" was not found.`);
+    }
+
+    return file as unknown as FileMetadataRecord;
+  }
+
+  /**
+   * Retrieve all files uploaded by a user with optional entity type filter.
+   */
+  async getMyFiles(userId: string, entityType?: string): Promise<FileMetadataRecord[]> {
+    let collection = this.prisma.client.orm.public.FileMetadata.where({ uploadedById: userId });
+
+    if (entityType) {
+      collection = collection.where((f) => f.entityType.eq(entityType));
+    }
+
+    const files = await collection.orderBy((f) => f.createdAt.desc()).all();
+    return files as unknown as FileMetadataRecord[];
   }
 
   /**

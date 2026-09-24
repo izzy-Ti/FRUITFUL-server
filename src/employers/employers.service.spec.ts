@@ -45,6 +45,23 @@ describe('EmployersService', () => {
             all: vi.fn(),
             orderBy: vi.fn(),
           },
+          VerificationRecord: {
+            create: vi.fn(),
+            where: vi.fn().mockReturnValue({
+              orderBy: vi.fn().mockReturnValue({
+                all: vi.fn().mockResolvedValue([
+                  {
+                    id: 'vr-1',
+                    employerId: 'emp-1',
+                    status: 'verified',
+                    reviewerId: 'admin-1',
+                    notes: 'Approved',
+                    createdAt: new Date().toISOString(),
+                  },
+                ]),
+              }),
+            }),
+          },
         },
       },
     },
@@ -175,7 +192,7 @@ describe('EmployersService', () => {
   });
 
   describe('updateVerificationStatus (Admin)', () => {
-    it('should verify employer organization', async () => {
+    it('should verify employer organization and record event', async () => {
       mockPrismaService.client.orm.public.EmployerProfile.where.mockReturnValue({
         first: vi.fn().mockResolvedValue({ ...mockEmployerProfile, verificationStatus: 'verified' }),
         update: vi.fn().mockResolvedValue({}),
@@ -186,9 +203,22 @@ describe('EmployersService', () => {
 
       const res = await service.updateVerificationStatus('emp-1', {
         status: 'verified',
-      });
+      }, 'admin-1');
 
       expect(res.verificationStatus).toBe('verified');
+      expect(mockPrismaService.client.orm.public.VerificationRecord.create).toHaveBeenCalled();
+    });
+  });
+
+  describe('getVerificationHistory', () => {
+    it('should retrieve verification records for employer', async () => {
+      mockPrismaService.client.orm.public.EmployerProfile.where.mockReturnValue({
+        first: vi.fn().mockResolvedValue(mockEmployerProfile),
+      });
+
+      const history = await service.getVerificationHistory('emp-1');
+      expect(history).toHaveLength(1);
+      expect(history[0].status).toBe('verified');
     });
   });
 });

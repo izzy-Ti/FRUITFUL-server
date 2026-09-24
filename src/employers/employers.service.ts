@@ -176,6 +176,15 @@ export class EmployersService {
         rejectionReason: null,
       });
 
+    // Create audit record in VerificationRecord
+    await this.prisma.client.orm.public.VerificationRecord.create({
+      id: randomUUID(),
+      employerId: existing.id,
+      status: 'pending',
+      reviewerId: null,
+      notes: 'Verification requested by employer.',
+    });
+
     const updated = await this.prisma.client.orm.public.EmployerProfile
       .where({ id: existing.id })
       .first();
@@ -246,6 +255,7 @@ export class EmployersService {
   async updateVerificationStatus(
     employerId: string,
     dto: VerifyEmployerDto,
+    reviewerId?: string,
   ): Promise<FullEmployerProfile> {
     const existing = await this.prisma.client.orm.public.EmployerProfile
       .where({ id: employerId })
@@ -266,6 +276,15 @@ export class EmployersService {
         rejectionReason: !isVerified ? dto.rejectionReason || 'Verification request rejected.' : null,
       });
 
+    // Create audit record in VerificationRecord
+    await this.prisma.client.orm.public.VerificationRecord.create({
+      id: randomUUID(),
+      employerId: existing.id,
+      status: dto.status,
+      reviewerId: reviewerId || null,
+      notes: dto.rejectionReason || (isVerified ? 'Verification approved by administrator.' : 'Verification rejected.'),
+    });
+
     this.logger.log(
       `Employer ${employerId} verification status set to "${dto.status}".`,
     );
@@ -275,5 +294,23 @@ export class EmployersService {
       .first();
 
     return this.assembleProfile(updated!);
+  }
+
+  /**
+   * Retrieve verification audit history for an employer organization.
+   */
+  async getVerificationHistory(employerId: string) {
+    const existing = await this.prisma.client.orm.public.EmployerProfile
+      .where({ id: employerId })
+      .first();
+
+    if (!existing) {
+      throw new NotFoundException(`Employer profile with ID "${employerId}" was not found.`);
+    }
+
+    return this.prisma.client.orm.public.VerificationRecord
+      .where({ employerId })
+      .orderBy((v) => v.createdAt.desc())
+      .all();
   }
 }

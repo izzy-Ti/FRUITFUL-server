@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { BadRequestException } from '@nestjs/common';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { StorageService } from './storage.service.js';
+import { PrismaService } from '../database/prisma.service.js';
 
 describe('StorageService', () => {
   let service: StorageService;
@@ -14,11 +15,50 @@ describe('StorageService', () => {
     },
   };
 
+  const mockFileMetadataRecord = {
+    id: 'file-123',
+    uploadedById: 'user-1',
+    fileName: 'my-resume.pdf',
+    originalName: 'my-resume.pdf',
+    mimeType: 'application/pdf',
+    size: 1024,
+    url: 'https://res.cloudinary.com/fruitful/mock/cvs/file-123.pdf',
+    secureUrl: 'https://res.cloudinary.com/fruitful/mock/cvs/file-123.pdf',
+    publicId: 'cvs/file-123',
+    entityType: 'cv',
+    entityId: null,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+
+  const mockPrismaService = {
+    client: {
+      orm: {
+        public: {
+          FileMetadata: {
+            create: async (data: any) => ({
+              ...data,
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            }),
+            where: () => ({
+              first: async () => mockFileMetadataRecord,
+              orderBy: () => ({
+                all: async () => [mockFileMetadataRecord],
+              }),
+            }),
+          },
+        },
+      },
+    },
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         StorageService,
         { provide: ConfigService, useValue: mockConfigService },
+        { provide: PrismaService, useValue: mockPrismaService },
       ],
     }).compile();
 

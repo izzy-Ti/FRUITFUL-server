@@ -1,14 +1,19 @@
 import {
   Controller,
+  Get,
   Post,
   UseInterceptors,
   UploadedFile,
   UseGuards,
   BadRequestException,
+  Param,
+  Query,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { StorageService, type UploadedFile as StoredFile } from './storage.service.js';
 import { AuthGuard } from '../auth/guards/auth.guard.js';
+import { CurrentUser } from '../auth/decorators/current-user.decorator.js';
+import type { AuthUser } from '../auth/auth.service.js';
 
 @Controller('upload')
 @UseGuards(AuthGuard)
@@ -20,7 +25,10 @@ export class StorageController {
    */
   @Post('cv')
   @UseInterceptors(FileInterceptor('file'))
-  async uploadCv(@UploadedFile() file?: StoredFile) {
+  async uploadCv(
+    @CurrentUser() user: AuthUser,
+    @UploadedFile() file?: StoredFile,
+  ) {
     if (!file) {
       throw new BadRequestException('File is required for upload. Use multipart key "file".');
     }
@@ -28,6 +36,8 @@ export class StorageController {
     const result = await this.storageService.uploadBuffer(file, {
       folder: 'cvs',
       resourceType: 'raw',
+      uploadedById: user.id,
+      entityType: 'cv',
       allowedMimeTypes: [
         'application/pdf',
         'application/msword',
@@ -47,7 +57,10 @@ export class StorageController {
    */
   @Post('image')
   @UseInterceptors(FileInterceptor('file'))
-  async uploadImage(@UploadedFile() file?: StoredFile) {
+  async uploadImage(
+    @CurrentUser() user: AuthUser,
+    @UploadedFile() file?: StoredFile,
+  ) {
     if (!file) {
       throw new BadRequestException('Image is required for upload. Use multipart key "file".');
     }
@@ -55,6 +68,8 @@ export class StorageController {
     const result = await this.storageService.uploadBuffer(file, {
       folder: 'images',
       resourceType: 'image',
+      uploadedById: user.id,
+      entityType: 'image',
       allowedMimeTypes: ['image/jpeg', 'image/png', 'image/webp', 'image/svg+xml'],
       maxSizeBytes: 5 * 1024 * 1024, // 5MB
     });
@@ -70,7 +85,10 @@ export class StorageController {
    */
   @Post('document')
   @UseInterceptors(FileInterceptor('file'))
-  async uploadDocument(@UploadedFile() file?: StoredFile) {
+  async uploadDocument(
+    @CurrentUser() user: AuthUser,
+    @UploadedFile() file?: StoredFile,
+  ) {
     if (!file) {
       throw new BadRequestException('Document is required for upload. Use multipart key "file".');
     }
@@ -78,12 +96,39 @@ export class StorageController {
     const result = await this.storageService.uploadBuffer(file, {
       folder: 'documents',
       resourceType: 'auto',
+      uploadedById: user.id,
+      entityType: 'document',
       maxSizeBytes: 15 * 1024 * 1024, // 15MB
     });
 
     return {
       message: 'Document uploaded successfully.',
       ...result,
+    };
+  }
+
+  /**
+   * Get all files uploaded by the authenticated user.
+   */
+  @Get('my-files')
+  async getMyFiles(
+    @CurrentUser() user: AuthUser,
+    @Query('entityType') entityType?: string,
+  ) {
+    const files = await this.storageService.getMyFiles(user.id, entityType);
+    return {
+      files,
+    };
+  }
+
+  /**
+   * Retrieve metadata for a specific uploaded file.
+   */
+  @Get('files/:id')
+  async getFileMetadata(@Param('id') id: string) {
+    const file = await this.storageService.getFileMetadata(id);
+    return {
+      file,
     };
   }
 }

@@ -124,3 +124,36 @@ model ProfileSkill {
   @@index([profileId])
   @@index([skillId])
 }
+
+model VerificationRecord {
+  id          String   @id
+  employerId  String
+  employer    EmployerProfile @relation(fields: [employerId], references: [id], onDelete: Cascade)
+  status      String
+  reviewerId  String?
+  notes       String?
+  createdAt   TimestamptzString @default(now())
+
+  @@index([employerId])
+  @@index([status])
+}
+
+model FileMetadata {
+  id           String   @id
+  uploadedById String?
+  user         User?    @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+  fileName     String
+  originalName String
+  mimeType     String
+  size         Int
+  url          String
+  secureUrl    String?
+  publicId     String?
+  entityType   String?
+  entityId     String?
+  createdAt    TimestamptzString @default(now())
+  updatedAt    temporal.updatedAtString()
+
+  @@index([uploadedById])
+  @@index([entityType])
+}

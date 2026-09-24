@@ -31,9 +31,15 @@ describe('StorageController', () => {
     vi.clearAllMocks();
   });
 
+  const mockUser = {
+    id: 'user-1',
+    email: 'user1@example.com',
+    role: 'job_seeker',
+  };
+
   describe('uploadCv', () => {
     it('should throw BadRequestException if no file is provided', async () => {
-      await expect(controller.uploadCv(undefined)).rejects.toThrow(
+      await expect(controller.uploadCv(mockUser, undefined)).rejects.toThrow(
         BadRequestException,
       );
     });
@@ -47,13 +53,13 @@ describe('StorageController', () => {
       mockStorageService.uploadBuffer.mockResolvedValue(mockResult);
 
       const mockFile = { originalname: 'cv.pdf', size: 100, buffer: Buffer.from('123'), mimetype: 'application/pdf' };
-      const res = await controller.uploadCv(mockFile);
+      const res = await controller.uploadCv(mockUser, mockFile);
 
       expect(res.message).toBe('CV uploaded successfully.');
       expect(res.url).toBe(mockResult.url);
       expect(mockStorageService.uploadBuffer).toHaveBeenCalledWith(
         mockFile,
-        expect.objectContaining({ folder: 'cvs' }),
+        expect.objectContaining({ folder: 'cvs', uploadedById: 'user-1' }),
       );
     });
   });
@@ -68,7 +74,7 @@ describe('StorageController', () => {
       mockStorageService.uploadBuffer.mockResolvedValue(mockResult);
 
       const mockFile = { originalname: 'pic.jpg', size: 100, buffer: Buffer.from('123'), mimetype: 'image/jpeg' };
-      const res = await controller.uploadImage(mockFile);
+      const res = await controller.uploadImage(mockUser, mockFile);
 
       expect(res.message).toBe('Image uploaded successfully.');
       expect(res.url).toBe(mockResult.url);

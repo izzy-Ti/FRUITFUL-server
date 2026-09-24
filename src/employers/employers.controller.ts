@@ -68,6 +68,21 @@ export class EmployersController {
     };
   }
 
+  @Get('profile/me/verification-history')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles(Role.EMPLOYER)
+  async getMyVerificationHistory(@CurrentUser() user: AuthUser) {
+    const profile = await this.employersService.getMyProfile(user.id);
+    if (!profile) {
+      return { history: [] };
+    }
+    const history = await this.employersService.getVerificationHistory(profile.id);
+    return {
+      employerId: profile.id,
+      history,
+    };
+  }
+
   // ==========================================
   // PUBLIC / DIRECTORY ENDPOINTS
   // ==========================================
@@ -107,13 +122,25 @@ export class EmployersController {
   @UseGuards(AuthGuard, RolesGuard)
   @Roles(Role.ADMIN)
   async updateVerification(
+    @CurrentUser() user: AuthUser,
     @Param('id') id: string,
     @Body() dto: VerifyEmployerDto,
   ) {
-    const profile = await this.employersService.updateVerificationStatus(id, dto);
+    const profile = await this.employersService.updateVerificationStatus(id, dto, user.id);
     return {
       message: `Employer organization status updated to "${dto.status}".`,
       profile,
+    };
+  }
+
+  @Get('admin/:id/verification-history')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles(Role.ADMIN)
+  async getAdminVerificationHistory(@Param('id') id: string) {
+    const history = await this.employersService.getVerificationHistory(id);
+    return {
+      employerId: id,
+      history,
     };
   }
 }
