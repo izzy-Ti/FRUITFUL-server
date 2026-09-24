@@ -5,3 +5,5 @@ export * from './create-experience.dto.js';
 export * from './update-experience.dto.js';
 export * from './assign-skill.dto.js';
 export * from './update-skill-assignment.dto.js';
+export * from './create-portfolio-project.dto.js';
+export * from './update-portfolio-project.dto.js';

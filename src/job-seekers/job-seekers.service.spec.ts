@@ -103,6 +103,12 @@ describe('JobSeekersService', () => {
             where: vi.fn(),
             create: vi.fn(),
           },
+          PortfolioProject: {
+            where: vi.fn(),
+            create: vi.fn(),
+            all: vi.fn(),
+            orderBy: vi.fn(),
+          },
         },
       },
     },
@@ -154,6 +160,12 @@ describe('JobSeekersService', () => {
 
       mockPrismaService.client.orm.public.Skill.where.mockReturnValue({
         first: vi.fn().mockResolvedValue(mockSkill),
+      });
+
+      mockPrismaService.client.orm.public.PortfolioProject.where.mockReturnValue({
+        orderBy: vi.fn().mockReturnValue({
+          all: vi.fn().mockResolvedValue([]),
+        }),
       });
 
       const result = await service.getFullProfileByUserId('user-1');
@@ -296,4 +308,141 @@ describe('JobSeekersService', () => {
       expect(result.success).toBe(true);
     });
   });
+
+  describe('Portfolio operations', () => {
+    const mockProject = {
+      id: 'proj-1',
+      profileId: 'profile-1',
+      title: 'E-commerce Store',
+      description: 'Built with NestJS and React',
+      category: 'Web Development',
+      projectUrl: 'https://store.example.com',
+      repoUrl: 'https://github.com/example/store',
+      images: ['https://example.com/img1.jpg'],
+      documents: [],
+      links: [],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    it('should add portfolio project', async () => {
+      vi.spyOn(service, 'getOrCreateProfileRecord').mockResolvedValue(mockProfile as any);
+      mockPrismaService.client.orm.public.PortfolioProject.create.mockResolvedValue(mockProject);
+
+      const res = await service.addPortfolioProject('user-1', {
+        title: 'E-commerce Store',
+        category: 'Web Development',
+      });
+
+      expect(res.title).toBe('E-commerce Store');
+      expect(res.category).toBe('Web Development');
+    });
+
+    it('should get portfolio project by id', async () => {
+      mockPrismaService.client.orm.public.PortfolioProject.where.mockReturnValue({
+        first: vi.fn().mockResolvedValue(mockProject),
+      });
+
+      const res = await service.getPortfolioProjectById('proj-1');
+      expect(res).toEqual(mockProject);
+    });
+
+    it('should throw NotFoundException if project not found', async () => {
+      mockPrismaService.client.orm.public.PortfolioProject.where.mockReturnValue({
+        first: vi.fn().mockResolvedValue(null),
+      });
+
+      await expect(service.getPortfolioProjectById('non-existent')).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it('should delete portfolio project with ownership verification', async () => {
+      vi.spyOn(service, 'getOrCreateProfileRecord').mockResolvedValue(mockProfile as any);
+      mockPrismaService.client.orm.public.PortfolioProject.where.mockReturnValue({
+        first: vi.fn().mockResolvedValue(mockProject),
+        delete: vi.fn().mockResolvedValue({}),
+      });
+
+      const res = await service.deletePortfolioProject('user-1', 'proj-1');
+      expect(res.success).toBe(true);
+    });
+  });
+
+  describe('Controlled Profile Visibility rules', () => {
+    it('should reject non-owner access when profile is private', async () => {
+      mockPrismaService.client.orm.public.JobSeekerProfile.where.mockReturnValue({
+        first: vi.fn().mockResolvedValue({ ...mockProfile, visibility: 'private' }),
+      });
+
+      await expect(
+        service.getFullProfileById('profile-1', { id: 'other-user', role: 'job_seeker' }),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('should reject non-employer access when profile is employers_only', async () => {
+      mockPrismaService.client.orm.public.JobSeekerProfile.where.mockReturnValue({
+        first: vi.fn().mockResolvedValue({ ...mockProfile, visibility: 'employers_only' }),
+      });
+
+      await expect(
+        service.getFullProfileById('profile-1', { id: 'other-user', role: 'job_seeker' }),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('should allow employer access when profile is employers_only', async () => {
+      mockPrismaService.client.orm.public.JobSeekerProfile.where.mockReturnValue({
+        first: vi.fn().mockResolvedValue({ ...mockProfile, visibility: 'employers_only' }),
+      });
+
+      mockPrismaService.client.orm.public.User.where.mockReturnValue({
+        first: vi.fn().mockResolvedValue(mockUser),
+      });
+
+      mockPrismaService.client.orm.public.EducationRecord.where.mockReturnValue({
+        orderBy: vi.fn().mockReturnValue({ all: vi.fn().mockResolvedValue([]) }),
+      });
+      mockPrismaService.client.orm.public.ExperienceRecord.where.mockReturnValue({
+        orderBy: vi.fn().mockReturnValue({ all: vi.fn().mockResolvedValue([]) }),
+      });
+      mockPrismaService.client.orm.public.ProfileSkill.where.mockReturnValue({
+        all: vi.fn().mockResolvedValue([]),
+      });
+      mockPrismaService.client.orm.public.PortfolioProject.where.mockReturnValue({
+        orderBy: vi.fn().mockReturnValue({ all: vi.fn().mockResolvedValue([]) }),
+      });
+
+      const res = await service.getFullProfileById('profile-1', { id: 'emp-user', role: 'employer' });
+      expect(res.id).toBe('profile-1');
+      expect(res.phone).toBe(mockProfile.phone);
+    });
+
+    it('should mask phone and email for anonymous/public visitors', async () => {
+      mockPrismaService.client.orm.public.JobSeekerProfile.where.mockReturnValue({
+        first: vi.fn().mockResolvedValue({ ...mockProfile, visibility: 'public' }),
+      });
+
+      mockPrismaService.client.orm.public.User.where.mockReturnValue({
+        first: vi.fn().mockResolvedValue(mockUser),
+      });
+
+      mockPrismaService.client.orm.public.EducationRecord.where.mockReturnValue({
+        orderBy: vi.fn().mockReturnValue({ all: vi.fn().mockResolvedValue([]) }),
+      });
+      mockPrismaService.client.orm.public.ExperienceRecord.where.mockReturnValue({
+        orderBy: vi.fn().mockReturnValue({ all: vi.fn().mockResolvedValue([]) }),
+      });
+      mockPrismaService.client.orm.public.ProfileSkill.where.mockReturnValue({
+        all: vi.fn().mockResolvedValue([]),
+      });
+      mockPrismaService.client.orm.public.PortfolioProject.where.mockReturnValue({
+        orderBy: vi.fn().mockReturnValue({ all: vi.fn().mockResolvedValue([]) }),
+      });
+
+      const res = await service.getFullProfileById('profile-1', undefined);
+      expect(res.phone).toBeNull();
+      expect(res.user?.email).toBe('***@***.***');
+    });
+  });
 });
+

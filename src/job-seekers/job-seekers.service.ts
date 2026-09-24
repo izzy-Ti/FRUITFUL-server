@@ -2,13 +2,13 @@ import {
   Injectable,
   NotFoundException,
   ForbiddenException,
-  ConflictException,
   BadRequestException,
   Logger,
 } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { PrismaService } from '../database/prisma.service.js';
 import { SkillsService } from '../skills/skills.service.js';
+import { Role } from '../common/enums/role.enum.js';
 import {
   UpsertProfileDto,
   CreateEducationDto,
@@ -17,6 +17,8 @@ import {
   UpdateExperienceDto,
   AssignSkillDto,
   UpdateSkillAssignmentDto,
+  CreatePortfolioProjectDto,
+  UpdatePortfolioProjectDto,
 } from './dto/index.js';
 
 export interface FullJobSeekerProfile {
@@ -29,15 +31,18 @@ export interface FullJobSeekerProfile {
   phone: string | null;
   cvUrl: string | null;
   languages: string[];
+  visibility: string;
+  isAvailable: boolean;
   user?: {
     id: string;
-    email: string;
+    email: string | null;
     name: string | null;
     role: string;
   } | null;
   education: any[];
   experience: any[];
   skills: any[];
+  portfolioProjects: any[];
   createdAt: string;
   updatedAt: string;
 }
@@ -64,6 +69,8 @@ export class JobSeekersService {
         id: randomUUID(),
         userId,
         languages: [],
+        visibility: 'public',
+        isAvailable: true,
       });
       this.logger.log(`Created new JobSeekerProfile ${profile.id} for user ${userId}`);
     }
@@ -72,7 +79,7 @@ export class JobSeekersService {
   }
 
   /**
-   * Retrieve the complete profile for a user including education, experience, and skills.
+   * Retrieve the complete profile for a user including education, experience, skills, and portfolio.
    */
   async getFullProfileByUserId(userId: string): Promise<FullJobSeekerProfile> {
     const profile = await this.getOrCreateProfileRecord(userId);
@@ -80,9 +87,12 @@ export class JobSeekersService {
   }
 
   /**
-   * Retrieve a public or employer-facing job seeker profile by profile ID.
+   * Retrieve a job seeker profile by ID with controlled visibility rules applied.
    */
-  async getFullProfileById(profileId: string): Promise<FullJobSeekerProfile> {
+  async getFullProfileById(
+    profileId: string,
+    viewer?: { id?: string; role?: string },
+  ): Promise<FullJobSeekerProfile> {
     const profile = await this.prisma.client.orm.public.JobSeekerProfile
       .where({ id: profileId })
       .first();
@@ -91,11 +101,37 @@ export class JobSeekersService {
       throw new NotFoundException(`Job seeker profile with ID "${profileId}" was not found.`);
     }
 
-    return this.assembleFullProfile(profile);
+    const isOwner = viewer?.id && viewer.id === profile.userId;
+    const isAdmin = viewer?.role === Role.ADMIN;
+    const isEmployer = viewer?.role === Role.EMPLOYER;
+
+    // Enforce controlled visibility rules
+    if (!isOwner && !isAdmin) {
+      if (profile.visibility === 'private') {
+        throw new ForbiddenException('This job seeker profile is set to private.');
+      }
+      if (profile.visibility === 'employers_only' && !isEmployer) {
+        throw new ForbiddenException(
+          'This profile is restricted to verified employers only.',
+        );
+      }
+    }
+
+    const assembled = await this.assembleFullProfile(profile);
+
+    // If viewer is anonymous or non-employer, protect contact details
+    if (!isOwner && !isAdmin && !isEmployer) {
+      assembled.phone = null;
+      if (assembled.user) {
+        assembled.user.email = '***@***.***';
+      }
+    }
+
+    return assembled;
   }
 
   /**
-   * Private helper to fetch related education, experience, skills, and user info for a profile.
+   * Private helper to fetch related education, experience, skills, portfolio, and user info.
    */
   private async assembleFullProfile(profile: any): Promise<FullJobSeekerProfile> {
     // 1. Fetch user info
@@ -139,6 +175,12 @@ export class JobSeekersService {
       }),
     );
 
+    // 5. Fetch portfolio projects
+    const portfolioProjects = await this.prisma.client.orm.public.PortfolioProject
+      .where({ profileId: profile.id })
+      .orderBy((p) => p.createdAt.desc())
+      .all();
+
     return {
       id: profile.id,
       userId: profile.userId,
@@ -149,6 +191,8 @@ export class JobSeekersService {
       phone: profile.phone,
       cvUrl: profile.cvUrl,
       languages: profile.languages || [],
+      visibility: profile.visibility || 'public',
+      isAvailable: profile.isAvailable ?? true,
       user: user
         ? {
             id: user.id,
@@ -160,6 +204,7 @@ export class JobSeekersService {
       education,
       experience,
       skills: skillsWithMeta,
+      portfolioProjects,
       createdAt: profile.createdAt,
       updatedAt: profile.updatedAt,
     };
@@ -184,6 +229,8 @@ export class JobSeekersService {
           ...(dto.phone !== undefined ? { phone: dto.phone } : {}),
           ...(dto.cvUrl !== undefined ? { cvUrl: dto.cvUrl } : {}),
           ...(dto.languages !== undefined ? { languages: dto.languages } : {}),
+          ...(dto.visibility !== undefined ? { visibility: dto.visibility } : {}),
+          ...(dto.isAvailable !== undefined ? { isAvailable: dto.isAvailable } : {}),
         });
     } else {
       await this.prisma.client.orm.public.JobSeekerProfile.create({
@@ -196,6 +243,8 @@ export class JobSeekersService {
         phone: dto.phone || null,
         cvUrl: dto.cvUrl || null,
         languages: dto.languages || [],
+        visibility: dto.visibility || 'public',
+        isAvailable: dto.isAvailable ?? true,
       });
     }
 
@@ -203,10 +252,27 @@ export class JobSeekersService {
   }
 
   /**
-   * Search talent directory with optional filtering.
+   * Search talent directory with role-aware privacy and filtering.
    */
-  async searchTalent(query?: { search?: string; location?: string; limit?: number }) {
+  async searchTalent(query?: {
+    search?: string;
+    location?: string;
+    isAvailable?: boolean;
+    limit?: number;
+    viewerRole?: string;
+  }) {
     let collection = this.prisma.client.orm.public.JobSeekerProfile;
+
+    // Apply visibility filter according to viewer role
+    if (query?.viewerRole === Role.EMPLOYER || query?.viewerRole === Role.ADMIN) {
+      collection = collection.where((p) => p.visibility.neq('private'));
+    } else {
+      collection = collection.where((p) => p.visibility.eq('public'));
+    }
+
+    if (query?.isAvailable !== undefined) {
+      collection = collection.where((p) => p.isAvailable.eq(query.isAvailable!));
+    }
 
     if (query?.location) {
       const locTerm = `%${query.location.trim().toLowerCase()}%`;
@@ -223,7 +289,20 @@ export class JobSeekersService {
     const limit = query?.limit || 20;
     const profiles = await collection.limit(limit).all();
 
-    return Promise.all(profiles.map((p) => this.assembleFullProfile(p)));
+    const isPrivileged =
+      query?.viewerRole === Role.EMPLOYER || query?.viewerRole === Role.ADMIN;
+
+    return Promise.all(
+      profiles.map((p) =>
+        this.assembleFullProfile(p).then((res) => {
+          if (!isPrivileged) {
+            res.phone = null;
+            if (res.user) res.user.email = '***@***.***';
+          }
+          return res;
+        }),
+      ),
+    );
   }
 
   // ==========================================
@@ -282,7 +361,7 @@ export class JobSeekersService {
         ...(dto.description !== undefined ? { description: dto.description.trim() } : {}),
       });
 
-    return updated;
+    return updated || existing;
   }
 
   async deleteEducation(userId: string, educationId: string) {
@@ -367,7 +446,7 @@ export class JobSeekersService {
         ...(dto.description !== undefined ? { description: dto.description.trim() } : {}),
       });
 
-    return updated;
+    return updated || existing;
   }
 
   async deleteExperience(userId: string, experienceId: string) {
@@ -541,6 +620,107 @@ export class JobSeekersService {
     return {
       success: true,
       message: 'Skill successfully removed from profile.',
+    };
+  }
+
+  // ==========================================
+  // PORTFOLIO PROJECTS
+  // ==========================================
+
+  async addPortfolioProject(userId: string, dto: CreatePortfolioProjectDto) {
+    const profile = await this.getOrCreateProfileRecord(userId);
+
+    const project = await this.prisma.client.orm.public.PortfolioProject.create({
+      id: randomUUID(),
+      profileId: profile.id,
+      title: dto.title.trim(),
+      description: dto.description?.trim() || null,
+      category: dto.category?.trim() || null,
+      projectUrl: dto.projectUrl || null,
+      repoUrl: dto.repoUrl || null,
+      images: dto.images || [],
+      documents: dto.documents || [],
+      links: dto.links || [],
+    });
+
+    return project;
+  }
+
+  async getPortfolioProjects(userId: string) {
+    const profile = await this.getOrCreateProfileRecord(userId);
+    return await this.prisma.client.orm.public.PortfolioProject
+      .where({ profileId: profile.id })
+      .orderBy((p) => p.createdAt.desc())
+      .all();
+  }
+
+  async getPortfolioProjectById(projectId: string) {
+    const project = await this.prisma.client.orm.public.PortfolioProject
+      .where({ id: projectId })
+      .first();
+
+    if (!project) {
+      throw new NotFoundException(`Portfolio project with ID "${projectId}" was not found.`);
+    }
+
+    return project;
+  }
+
+  async updatePortfolioProject(
+    userId: string,
+    projectId: string,
+    dto: UpdatePortfolioProjectDto,
+  ) {
+    const profile = await this.getOrCreateProfileRecord(userId);
+    const existing = await this.prisma.client.orm.public.PortfolioProject
+      .where({ id: projectId })
+      .first();
+
+    if (!existing) {
+      throw new NotFoundException(`Portfolio project with ID "${projectId}" was not found.`);
+    }
+
+    if (existing.profileId !== profile.id) {
+      throw new ForbiddenException('You do not have permission to modify this portfolio project.');
+    }
+
+    const updated = await this.prisma.client.orm.public.PortfolioProject
+      .where({ id: projectId })
+      .update({
+        ...(dto.title !== undefined ? { title: dto.title.trim() } : {}),
+        ...(dto.description !== undefined ? { description: dto.description.trim() } : {}),
+        ...(dto.category !== undefined ? { category: dto.category.trim() } : {}),
+        ...(dto.projectUrl !== undefined ? { projectUrl: dto.projectUrl } : {}),
+        ...(dto.repoUrl !== undefined ? { repoUrl: dto.repoUrl } : {}),
+        ...(dto.images !== undefined ? { images: dto.images } : {}),
+        ...(dto.documents !== undefined ? { documents: dto.documents } : {}),
+        ...(dto.links !== undefined ? { links: dto.links } : {}),
+      });
+
+    return updated || existing;
+  }
+
+  async deletePortfolioProject(userId: string, projectId: string) {
+    const profile = await this.getOrCreateProfileRecord(userId);
+    const existing = await this.prisma.client.orm.public.PortfolioProject
+      .where({ id: projectId })
+      .first();
+
+    if (!existing) {
+      throw new NotFoundException(`Portfolio project with ID "${projectId}" was not found.`);
+    }
+
+    if (existing.profileId !== profile.id) {
+      throw new ForbiddenException('You do not have permission to delete this portfolio project.');
+    }
+
+    await this.prisma.client.orm.public.PortfolioProject
+      .where({ id: projectId })
+      .delete();
+
+    return {
+      success: true,
+      message: 'Portfolio project successfully deleted.',
     };
   }
 }

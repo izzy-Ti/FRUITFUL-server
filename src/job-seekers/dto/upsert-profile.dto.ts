@@ -1,10 +1,15 @@
 import {
   IsArray,
+  IsBoolean,
+  IsIn,
   IsOptional,
   IsString,
   IsUrl,
   MaxLength,
 } from 'class-validator';
+
+export const PROFILE_VISIBILITY = ['public', 'employers_only', 'private'] as const;
+export type ProfileVisibility = (typeof PROFILE_VISIBILITY)[number];
 
 export class UpsertProfileDto {
   @IsOptional()
@@ -41,4 +46,15 @@ export class UpsertProfileDto {
   @IsArray({ message: 'Languages must be an array of strings' })
   @IsString({ each: true, message: 'Each language must be a string' })
   languages?: string[];
+
+  @IsOptional()
+  @IsString()
+  @IsIn(PROFILE_VISIBILITY, {
+    message: `visibility must be one of: ${PROFILE_VISIBILITY.join(', ')}`,
+  })
+  visibility?: string;
+
+  @IsOptional()
+  @IsBoolean({ message: 'isAvailable must be a boolean' })
+  isAvailable?: boolean;
 }

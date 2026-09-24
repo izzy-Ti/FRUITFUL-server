@@ -52,6 +52,11 @@ describe('JobSeekersController', () => {
     batchAssignSkills: vi.fn(),
     updateSkillAssignment: vi.fn(),
     removeSkill: vi.fn(),
+    getPortfolioProjects: vi.fn(),
+    addPortfolioProject: vi.fn(),
+    getPortfolioProjectById: vi.fn(),
+    updatePortfolioProject: vi.fn(),
+    deletePortfolioProject: vi.fn(),
   };
 
   const mockAuthService = {
@@ -95,14 +100,14 @@ describe('JobSeekersController', () => {
     it('should get public profile by id', async () => {
       mockJobSeekersService.getFullProfileById.mockResolvedValue(mockProfile);
 
-      const res = await controller.getProfileById('profile-1');
+      const res = await controller.getProfileById('profile-1', mockUser);
       expect(res).toEqual(mockProfile);
     });
 
     it('should search talent directory', async () => {
       mockJobSeekersService.searchTalent.mockResolvedValue([mockProfile]);
 
-      const res = await controller.searchTalent('Full Stack', 'Addis Ababa', 10);
+      const res = await controller.searchTalent(mockUser, 'Full Stack', 'Addis Ababa', 'true', 10);
       expect(res.count).toBe(1);
       expect(res.jobSeekers).toEqual([mockProfile]);
     });
@@ -188,4 +193,29 @@ describe('JobSeekersController', () => {
       expect(res.success).toBe(true);
     });
   });
+
+  describe('Portfolio Endpoints', () => {
+    it('should list portfolio projects', async () => {
+      mockJobSeekersService.getPortfolioProjects.mockResolvedValue([{ id: 'proj-1', title: 'App' }]);
+
+      const res = await controller.getPortfolioProjects(mockUser);
+      expect(res.count).toBe(1);
+    });
+
+    it('should add portfolio project', async () => {
+      mockJobSeekersService.addPortfolioProject.mockResolvedValue({ id: 'proj-1', title: 'App' });
+
+      const res = await controller.addPortfolioProject(mockUser, { title: 'App' });
+      expect(res.message).toBe('Portfolio project added successfully.');
+      expect(res.project.title).toBe('App');
+    });
+
+    it('should delete portfolio project', async () => {
+      mockJobSeekersService.deletePortfolioProject.mockResolvedValue({ success: true });
+
+      const res = await controller.deletePortfolioProject(mockUser, 'proj-1');
+      expect(res.success).toBe(true);
+    });
+  });
 });
+

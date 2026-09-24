@@ -21,6 +21,8 @@ import {
   AssignSkillDto,
   BatchAssignSkillsDto,
   UpdateSkillAssignmentDto,
+  CreatePortfolioProjectDto,
+  UpdatePortfolioProjectDto,
 } from './dto/index.js';
 import { AuthGuard } from '../auth/guards/auth.guard.js';
 import { RolesGuard } from '../auth/guards/roles.guard.js';
@@ -60,21 +62,28 @@ export class JobSeekersController {
 
   @Get('profile/:id')
   @UseGuards(AuthGuard)
-  async getProfileById(@Param('id') id: string) {
-    return this.jobSeekersService.getFullProfileById(id);
+  async getProfileById(
+    @Param('id') id: string,
+    @CurrentUser() viewer: AuthUser,
+  ) {
+    return this.jobSeekersService.getFullProfileById(id, viewer);
   }
 
   @Get()
   @UseGuards(AuthGuard)
   async searchTalent(
+    @CurrentUser() viewer: AuthUser,
     @Query('search') search?: string,
     @Query('location') location?: string,
+    @Query('isAvailable') isAvailable?: string,
     @Query('limit') limit?: number,
   ) {
     const results = await this.jobSeekersService.searchTalent({
       search,
       location,
+      isAvailable: isAvailable !== undefined ? isAvailable === 'true' : undefined,
       limit: limit ? Number(limit) : undefined,
+      viewerRole: viewer?.role,
     });
     return {
       count: results.length,
@@ -257,4 +266,66 @@ export class JobSeekersController {
   ) {
     return this.jobSeekersService.removeSkill(user.id, skillId);
   }
+
+  // ==========================================
+  // PORTFOLIO ENDPOINTS
+  // ==========================================
+
+  @Get('portfolio')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles(Role.JOB_SEEKER)
+  async getPortfolioProjects(@CurrentUser() user: AuthUser) {
+    const projects = await this.jobSeekersService.getPortfolioProjects(user.id);
+    return {
+      count: projects.length,
+      projects,
+    };
+  }
+
+  @Post('portfolio')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles(Role.JOB_SEEKER)
+  @HttpCode(HttpStatus.CREATED)
+  async addPortfolioProject(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: CreatePortfolioProjectDto,
+  ) {
+    const project = await this.jobSeekersService.addPortfolioProject(user.id, dto);
+    return {
+      message: 'Portfolio project added successfully.',
+      project,
+    };
+  }
+
+  @Get('portfolio/:id')
+  @UseGuards(AuthGuard)
+  async getPortfolioProjectById(@Param('id') id: string) {
+    return this.jobSeekersService.getPortfolioProjectById(id);
+  }
+
+  @Put('portfolio/:id')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles(Role.JOB_SEEKER)
+  async updatePortfolioProject(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() dto: UpdatePortfolioProjectDto,
+  ) {
+    const project = await this.jobSeekersService.updatePortfolioProject(user.id, id, dto);
+    return {
+      message: 'Portfolio project updated successfully.',
+      project,
+    };
+  }
+
+  @Delete('portfolio/:id')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles(Role.JOB_SEEKER)
+  async deletePortfolioProject(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+  ) {
+    return this.jobSeekersService.deletePortfolioProject(user.id, id);
+  }
 }
+

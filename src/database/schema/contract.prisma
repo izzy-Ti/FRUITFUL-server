@@ -10,18 +10,60 @@ model User {
 }
 
 model JobSeekerProfile {
-  id        String   @id
-  userId    String   @unique
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  headline  String?
-  photoUrl  String?
-  bio       String?
-  location  String?
-  phone     String?
-  cvUrl     String?
-  languages String[]
-  createdAt TimestamptzString @default(now())
-  updatedAt temporal.updatedAtString()
+  id          String   @id
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  headline    String?
+  photoUrl    String?
+  bio         String?
+  location    String?
+  phone       String?
+  cvUrl       String?
+  languages   String[]
+  visibility  String   @default("public")
+  isAvailable Boolean  @default(true)
+  createdAt   TimestamptzString @default(now())
+  updatedAt   temporal.updatedAtString()
+}
+
+model PortfolioProject {
+  id          String   @id
+  profileId   String
+  profile     JobSeekerProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  title       String
+  description String?
+  category    String?
+  projectUrl  String?
+  repoUrl     String?
+  images      String[]
+  documents   String[]
+  links       String[]
+  createdAt   TimestamptzString @default(now())
+  updatedAt   temporal.updatedAtString()
+
+  @@index([profileId])
+}
+
+model EmployerProfile {
+  id                 String   @id
+  userId             String   @unique
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name               String
+  logoUrl            String?
+  description        String?
+  industry           String?
+  companySize        String?
+  websiteUrl         String?
+  location           String?
+  contactEmail       String?
+  contactPhone       String?
+  verificationStatus String   @default("pending")
+  verifiedAt         TimestamptzString?
+  rejectionReason    String?
+  createdAt          TimestamptzString @default(now())
+  updatedAt          temporal.updatedAtString()
+
+  @@index([verificationStatus])
 }
 
 model EducationRecord {
