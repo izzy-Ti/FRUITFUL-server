@@ -20,6 +20,10 @@
       "model": "FileMetadata",
       "namespace": "public"
     },
+    "job": {
+      "model": "Job",
+      "namespace": "public"
+    },
     "jobSeekerProfile": {
       "model": "JobSeekerProfile",
       "namespace": "public"
@@ -679,6 +683,245 @@
               },
               "namespaceId": "public",
               "table": "fileMetadata"
+            }
+          },
+          "Job": {
+            "fields": {
+              "category": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "closedAt": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "createdAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "deadline": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "description": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "employerId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "employmentType": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "experienceLevel": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "location": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "publishedAt": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "requirements": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "responsibilities": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "salaryCurrency": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "salaryMax": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
+              "salaryMin": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
+              "skills": {
+                "many": true,
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "status": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "title": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "updatedAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "workplaceType": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              }
+            },
+            "relations": {
+              "employer": {
+                "cardinality": "N:1",
+                "nullable": false,
+                "on": {
+                  "localFields": [
+                    "employerId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "EmployerProfile",
+                  "namespace": "public"
+                }
+              }
+            },
+            "storage": {
+              "fields": {
+                "category": {
+                  "column": "category"
+                },
+                "closedAt": {
+                  "column": "closedAt"
+                },
+                "createdAt": {
+                  "column": "createdAt"
+                },
+                "deadline": {
+                  "column": "deadline"
+                },
+                "description": {
+                  "column": "description"
+                },
+                "employerId": {
+                  "column": "employerId"
+                },
+                "employmentType": {
+                  "column": "employmentType"
+                },
+                "experienceLevel": {
+                  "column": "experienceLevel"
+                },
+                "id": {
+                  "column": "id"
+                },
+                "location": {
+                  "column": "location"
+                },
+                "publishedAt": {
+                  "column": "publishedAt"
+                },
+                "requirements": {
+                  "column": "requirements"
+                },
+                "responsibilities": {
+                  "column": "responsibilities"
+                },
+                "salaryCurrency": {
+                  "column": "salaryCurrency"
+                },
+                "salaryMax": {
+                  "column": "salaryMax"
+                },
+                "salaryMin": {
+                  "column": "salaryMin"
+                },
+                "skills": {
+                  "column": "skills"
+                },
+                "status": {
+                  "column": "status"
+                },
+                "title": {
+                  "column": "title"
+                },
+                "updatedAt": {
+                  "column": "updatedAt"
+                },
+                "workplaceType": {
+                  "column": "workplaceType"
+                }
+              },
+              "namespaceId": "public",
+              "table": "job"
             }
           },
           "JobSeekerProfile": {
@@ -1792,6 +2035,210 @@
               },
               "uniques": []
             },
+            "job": {
+              "checks": [
+                {
+                  "expression": "array_position(\"skills\", NULL) IS NULL",
+                  "name": "job_skills_elem_not_null_79c19a4f",
+                  "prefix": "job_skills_elem_not_null"
+                }
+              ],
+              "columns": {
+                "category": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "closedAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "nativeType": "timestamptz",
+                  "nullable": true
+                },
+                "createdAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "default": {
+                    "expression": "now()",
+                    "kind": "function"
+                  },
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                },
+                "deadline": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "description": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "employerId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "employmentType": {
+                  "codecId": "pg/text@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": "full_time"
+                  },
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "experienceLevel": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "id": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "location": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "publishedAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "nativeType": "timestamptz",
+                  "nullable": true
+                },
+                "requirements": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "responsibilities": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "salaryCurrency": {
+                  "codecId": "pg/text@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": "USD"
+                  },
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "salaryMax": {
+                  "codecId": "pg/int4@1",
+                  "nativeType": "int4",
+                  "nullable": true
+                },
+                "salaryMin": {
+                  "codecId": "pg/int4@1",
+                  "nativeType": "int4",
+                  "nullable": true
+                },
+                "skills": {
+                  "codecId": "pg/text@1",
+                  "many": true,
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "status": {
+                  "codecId": "pg/text@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": "draft"
+                  },
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "title": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "updatedAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                },
+                "workplaceType": {
+                  "codecId": "pg/text@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": "on_site"
+                  },
+                  "nativeType": "text",
+                  "nullable": false
+                }
+              },
+              "foreignKeys": [
+                {
+                  "onDelete": "cascade",
+                  "source": {
+                    "columns": [
+                      "employerId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "job"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "employerProfile"
+                  }
+                }
+              ],
+              "indexes": [
+                {
+                  "columns": [
+                    "category"
+                  ],
+                  "name": "job_category_idx_f2600f8e",
+                  "prefix": "job_category_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "employerId"
+                  ],
+                  "name": "job_employerId_idx_599302e4",
+                  "prefix": "job_employerId_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "employmentType"
+                  ],
+                  "name": "job_employmentType_idx_953959e4",
+                  "prefix": "job_employmentType_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "status"
+                  ],
+                  "name": "job_status_idx_e98638ab",
+                  "prefix": "job_status_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "workplaceType"
+                  ],
+                  "name": "job_workplaceType_idx_24d1bcc1",
+                  "prefix": "job_workplaceType_idx",
+                  "unique": false
+                }
+              ],
+              "primaryKey": {
+                "columns": [
+                  "id"
+                ]
+              },
+              "uniques": []
+            },
             "jobSeekerProfile": {
               "checks": [
                 {
@@ -2336,10 +2783,10 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "cf539ee679fcb19120d671634ace40b556c61a163bc27a600af620b4010c1d18"
+    "storageHash": "cc49ebb534576575280d63622e2e70bc77a7dbf88cb39c62171d6899fa51c972"
   },
   "execution": {
-    "executionHash": "c29bb27ce0b342ab6db80079aab14d67d2eff79307f47b62f2e6ccf563334e80",
+    "executionHash": "b615d4a8a15c4c659ea178d1355c1285b1b08f0041256ee630a3730fee94e748",
     "mutations": {
       "defaults": [
         {
@@ -2400,6 +2847,21 @@
             "column": "updatedAt",
             "namespace": "public",
             "table": "fileMetadata"
+          }
+        },
+        {
+          "onCreate": {
+            "id": "timestampNow",
+            "kind": "generator"
+          },
+          "onUpdate": {
+            "id": "timestampNow",
+            "kind": "generator"
+          },
+          "ref": {
+            "column": "updatedAt",
+            "namespace": "public",
+            "table": "job"
           }
         },
         {

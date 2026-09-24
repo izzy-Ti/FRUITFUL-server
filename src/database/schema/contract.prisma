@@ -157,3 +157,34 @@ model FileMetadata {
   @@index([uploadedById])
   @@index([entityType])
 }
+
+model Job {
+  id               String   @id
+  employerId       String
+  employer         EmployerProfile @relation(fields: [employerId], references: [id], onDelete: Cascade)
+  title            String
+  description      String
+  requirements     String?
+  responsibilities String?
+  category         String?
+  employmentType   String   @default("full_time")
+  workplaceType    String   @default("on_site")
+  location         String?
+  salaryMin        Int?
+  salaryMax        Int?
+  salaryCurrency   String?  @default("USD")
+  experienceLevel  String?
+  skills           String[]
+  status           String   @default("draft")
+  publishedAt      TimestamptzString?
+  closedAt         TimestamptzString?
+  deadline         String?
+  createdAt        TimestamptzString @default(now())
+  updatedAt        temporal.updatedAtString()
+
+  @@index([employerId])
+  @@index([status])
+  @@index([employmentType])
+  @@index([workplaceType])
+  @@index([category])
+}
