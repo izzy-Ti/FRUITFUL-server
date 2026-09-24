@@ -10,9 +10,14 @@ import {
   HttpStatus,
   Headers,
   UnauthorizedException,
+  UseGuards,
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { AuthService } from './auth.service.js';
+import { AuthGuard } from './guards/auth.guard.js';
+import { RolesGuard } from './guards/roles.guard.js';
+import { Roles } from './decorators/roles.decorator.js';
+import { Role } from '../common/enums/role.enum.js';
 import {
   RegisterDto,
   LoginDto,
@@ -240,4 +245,44 @@ export class AuthController {
       session: sessionData.session,
     };
   }
+
+  /**
+   * RBAC endpoint accessible by users with the 'job_seeker' role.
+   */
+  @Get('job-seeker-only')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles(Role.JOB_SEEKER)
+  getJobSeekerResource(@Req() req: Request) {
+    return {
+      message: 'Access granted to Job Seeker resource.',
+      user: (req as any).user,
+    };
+  }
+
+  /**
+   * RBAC endpoint accessible by users with the 'employer' role.
+   */
+  @Get('employer-only')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles(Role.EMPLOYER)
+  getEmployerResource(@Req() req: Request) {
+    return {
+      message: 'Access granted to Employer resource.',
+      user: (req as any).user,
+    };
+  }
+
+  /**
+   * RBAC endpoint accessible exclusively by users with the 'admin' role.
+   */
+  @Get('admin-only')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles(Role.ADMIN)
+  getAdminResource(@Req() req: Request) {
+    return {
+      message: 'Access granted to Admin resource.',
+      user: (req as any).user,
+    };
+  }
 }
+

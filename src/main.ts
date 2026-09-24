@@ -1,7 +1,11 @@
 import { NestFactory } from '@nestjs/core';
-import { ValidationPipe } from '@nestjs/common';
 import cookieParser from 'cookie-parser';
 import { AppModule, ObserveInstrument } from './app.module.js';
+import {
+  GlobalExceptionFilter,
+  createGlobalValidationPipe,
+  TransformInterceptor,
+} from './common/index.js';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
@@ -10,13 +14,14 @@ async function bootstrap() {
 
   app.use(cookieParser());
 
-  app.useGlobalPipes(
-    new ValidationPipe({
-      whitelist: true,
-      transform: true,
-      forbidNonWhitelisted: false,
-    }),
-  );
+  // Global validation pipe with detailed structured errors
+  app.useGlobalPipes(createGlobalValidationPipe());
+
+  // Global exception filter for unified error response structure
+  app.useGlobalFilters(new GlobalExceptionFilter());
+
+  // Standardized API response format { success, statusCode, data, timestamp }
+  app.useGlobalInterceptors(new TransformInterceptor());
 
   app.enableCors({
     origin: true,

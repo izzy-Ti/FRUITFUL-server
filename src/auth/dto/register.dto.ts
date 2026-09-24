@@ -1,4 +1,5 @@
 import { IsEmail, IsNotEmpty, IsOptional, IsString, MinLength, IsIn } from 'class-validator';
+import { Role, ROLES_LIST } from '../../common/enums/role.enum.js';
 
 export class RegisterDto {
   @IsEmail({}, { message: 'A valid email address is required' })
@@ -14,8 +15,8 @@ export class RegisterDto {
 
   @IsOptional()
   @IsString()
-  @IsIn(['job_seeker', 'employer', 'admin'], {
-    message: 'Role must be one of: job_seeker, employer, admin',
+  @IsIn(ROLES_LIST, {
+    message: `Role must be one of: ${ROLES_LIST.join(', ')}`,
   })
-  role?: string;
+  role?: Role;
 }

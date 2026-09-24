@@ -5,8 +5,10 @@ import { AuthService } from './auth.service.js';
 import { AuthGuard } from './guards/auth.guard.js';
 import { RolesGuard } from './guards/roles.guard.js';
 
+import { DatabaseModule } from '../database/database.module.js';
+
 @Module({
-  imports: [ConfigModule],
+  imports: [ConfigModule, DatabaseModule],
   controllers: [AuthController],
   providers: [AuthService, AuthGuard, RolesGuard],
   exports: [AuthService, AuthGuard, RolesGuard],

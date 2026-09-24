@@ -258,4 +258,27 @@ describe('AuthController', () => {
     expect(result.success).toBe(true);
     expect(result.message).toContain('OAuth sign-in completed successfully');
   });
+
+  describe('Role-protected endpoints', () => {
+    it('should return job seeker resource', () => {
+      const mockReq = { user: { id: 'u1', role: 'job_seeker' } } as any;
+      const res = authController.getJobSeekerResource(mockReq);
+      expect(res.message).toContain('Job Seeker resource');
+      expect(res.user.role).toBe('job_seeker');
+    });
+
+    it('should return employer resource', () => {
+      const mockReq = { user: { id: 'u2', role: 'employer' } } as any;
+      const res = authController.getEmployerResource(mockReq);
+      expect(res.message).toContain('Employer resource');
+      expect(res.user.role).toBe('employer');
+    });
+
+    it('should return admin resource', () => {
+      const mockReq = { user: { id: 'u3', role: 'admin' } } as any;
+      const res = authController.getAdminResource(mockReq);
+      expect(res.message).toContain('Admin resource');
+      expect(res.user.role).toBe('admin');
+    });
+  });
 });

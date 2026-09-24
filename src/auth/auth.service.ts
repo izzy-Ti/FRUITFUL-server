@@ -7,6 +7,8 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as jose from 'jose';
+import { PrismaService } from '../database/prisma.service.js';
+import { Role } from '../common/enums/role.enum.js';
 import {
   RegisterDto,
   LoginDto,
@@ -52,7 +54,10 @@ export class AuthService {
   private readonly defaultOrigin: string;
   private jwksClient?: ReturnType<typeof jose.createRemoteJWKSet>;
 
-  constructor(private readonly configService: ConfigService) {
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly prisma: PrismaService,
+  ) {
     this.authBaseUrl = this.configService.get<string>('auth.baseUrl') || '';
     this.jwksUrl = this.configService.get<string>('auth.jwksUrl') || '';
     const port = this.configService.get<number>('app.port', 3000);
@@ -145,6 +150,36 @@ export class AuthService {
   }
 
   /**
+   * Helper to synchronize a user profile and role with the database.
+   */
+  private async syncUserProfile(user: AuthUser, requestedRole?: Role): Promise<void> {
+    if (!user?.id) return;
+    try {
+      const existing = await this.prisma.client.orm.public.User
+        .where({ id: user.id })
+        .first();
+
+      if (existing) {
+        user.role = existing.role;
+      } else {
+        const assignedRole = requestedRole || Role.JOB_SEEKER;
+        await this.prisma.client.orm.public.User.create({
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          role: assignedRole,
+        });
+        user.role = assignedRole;
+      }
+    } catch (err) {
+      this.logger.warn(`Could not sync user profile in database: ${err}`);
+      if (!user.role) {
+        user.role = requestedRole || Role.JOB_SEEKER;
+      }
+    }
+  }
+
+  /**
    * Register a new user with email and password via Neon Auth.
    */
   async register(
@@ -164,6 +199,10 @@ export class AuthService {
     );
 
     const setCookies = result.headers.getSetCookie?.() || [];
+    if (result.data?.user) {
+      await this.syncUserProfile(result.data.user, dto.role as Role);
+    }
+
     return {
       data: result.data,
       setCookieHeaders: setCookies,
@@ -189,6 +228,10 @@ export class AuthService {
     );
 
     const setCookies = result.headers.getSetCookie?.() || [];
+    if (result.data?.user) {
+      await this.syncUserProfile(result.data.user);
+    }
+
     return {
       data: result.data,
       setCookieHeaders: setCookies,
@@ -281,6 +324,10 @@ export class AuthService {
       headers,
       origin,
     });
+
+    if (result.data?.user) {
+      await this.syncUserProfile(result.data.user);
+    }
 
     return result.data;
   }
