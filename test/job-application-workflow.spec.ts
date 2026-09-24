@@ -240,6 +240,11 @@ describe('Job & Application Complete Lifecycle Workflow', () => {
                 orderBy: () => ({ all: async () => [] }),
               }),
             },
+            Skill: {
+              where: () => ({
+                first: async () => null,
+              }),
+            },
           },
         },
       },

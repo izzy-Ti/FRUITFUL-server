@@ -81,10 +81,10 @@ describe('JobsController', () => {
         jobs: [mockJob],
       });
 
-      const res = await controller.findPublicJobs({ search: 'React' });
+      const res = await controller.findPublicJobs(mockUser, { search: 'React' });
       expect(res.total).toBe(1);
       expect(res.jobs).toEqual([mockJob]);
-      expect(mockJobsService.findPublicJobs).toHaveBeenCalledWith({ search: 'React' });
+      expect(mockJobsService.findPublicJobs).toHaveBeenCalledWith({ search: 'React' }, mockUser);
     });
   });
 

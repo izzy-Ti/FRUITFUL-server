@@ -31,12 +31,16 @@ export class JobsController {
   // ==========================================
 
   /**
-   * Browse and search published job listings.
+   * Search published job listings.
+   * Requires authentication. Ranks jobs by profile relevance for candidates.
    */
   @Get()
-  @UseGuards(OptionalAuthGuard)
-  async findPublicJobs(@Query() query: QueryJobsDto) {
-    return this.jobsService.findPublicJobs(query);
+  @UseGuards(AuthGuard)
+  async findPublicJobs(
+    @CurrentUser() user: AuthUser,
+    @Query() query: QueryJobsDto,
+  ) {
+    return this.jobsService.findPublicJobs(query, user);
   }
 
   // ==========================================

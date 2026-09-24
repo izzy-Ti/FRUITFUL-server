@@ -54,6 +54,26 @@ describe('JobsService', () => {
             create: vi.fn(),
             delete: vi.fn(),
           },
+          JobSeekerProfile: {
+            where: vi.fn().mockReturnValue({
+              first: vi.fn().mockResolvedValue(null),
+            }),
+          },
+          ProfileSkill: {
+            where: vi.fn().mockReturnValue({
+              all: vi.fn().mockResolvedValue([]),
+            }),
+          },
+          Skill: {
+            where: vi.fn().mockReturnValue({
+              first: vi.fn().mockResolvedValue(null),
+            }),
+          },
+          ExperienceRecord: {
+            where: vi.fn().mockReturnValue({
+              all: vi.fn().mockResolvedValue([]),
+            }),
+          },
         },
       },
     },
@@ -250,6 +270,68 @@ describe('JobsService', () => {
       await expect(service.getJobById('job-1', undefined)).rejects.toThrow(
         ForbiddenException,
       );
+    });
+
+    it('should rank jobs related to candidate profile at the top like Upwork, and least related at the bottom', async () => {
+      const relatedJob = {
+        ...mockJob,
+        id: 'job-react',
+        title: 'Senior React Developer',
+        skills: ['React', 'TypeScript'],
+        category: 'Frontend',
+        workplaceType: 'remote',
+      };
+
+      const unrelatedJob = {
+        ...mockJob,
+        id: 'job-nurse',
+        title: 'Registered Nurse',
+        skills: ['Nursing', 'Healthcare'],
+        category: 'Healthcare',
+        workplaceType: 'on_site',
+      };
+
+      const mockQueryChain: any = {};
+      mockQueryChain.where = vi.fn().mockReturnValue(mockQueryChain);
+      mockQueryChain.orderBy = vi.fn().mockReturnValue(mockQueryChain);
+      mockQueryChain.all = vi.fn().mockResolvedValue([unrelatedJob, relatedJob]);
+      mockQueryChain.first = vi.fn().mockResolvedValue(relatedJob);
+
+      mockPrismaService.client.orm.public.Job.where = mockQueryChain.where;
+      mockPrismaService.client.orm.public.Job.orderBy = mockQueryChain.orderBy;
+      mockPrismaService.client.orm.public.EmployerProfile.where.mockReturnValue({
+        first: vi.fn().mockResolvedValue(mockEmployerProfile),
+      });
+
+      // Mock candidate profile
+      mockPrismaService.client.orm.public.JobSeekerProfile.where.mockReturnValue({
+        first: vi.fn().mockResolvedValue({
+          id: 'prof-1',
+          userId: 'user-seeker-1',
+          headline: 'Senior React Developer',
+          location: 'Remote',
+        }),
+      });
+      mockPrismaService.client.orm.public.ProfileSkill.where.mockReturnValue({
+        all: vi.fn().mockResolvedValue([{ skillId: 'skill-react' }, { skillId: 'skill-ts' }]),
+      });
+      mockPrismaService.client.orm.public.Skill.where.mockImplementation((filter: any) => ({
+        first: vi.fn().mockResolvedValue(
+          filter.id === 'skill-react'
+            ? { id: 'skill-react', name: 'React' }
+            : { id: 'skill-ts', name: 'TypeScript' },
+        ),
+      }));
+
+      const res = await service.findPublicJobs({}, {
+        id: 'user-seeker-1',
+        role: 'job_seeker',
+      } as any);
+
+      expect(res.jobs).toHaveLength(2);
+      expect(res.jobs[0].id).toBe('job-react'); // Related job at the top
+      expect(res.jobs[1].id).toBe('job-nurse'); // Unrelated job at the bottom
+      expect(res.jobs[0].relevanceScore).toBeGreaterThan(res.jobs[1].relevanceScore || 0);
     });
   });
 });

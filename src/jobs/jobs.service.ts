@@ -45,6 +45,7 @@ export interface FullJob {
   hasApplied?: boolean;
   applicationId?: string | null;
   applicationStatus?: string | null;
+  relevanceScore?: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -362,9 +363,195 @@ export class JobsService {
   }
 
   /**
-   * Public & Candidates: Browse and search published jobs.
+   * Internal helper to extract candidate profile context for relevance ranking.
    */
-  async findPublicJobs(query: QueryJobsDto): Promise<{
+  private async getCandidateProfileContext(userId: string): Promise<{
+    headline: string | null;
+    bio: string | null;
+    location: string | null;
+    skills: string[];
+    experienceTitles: string[];
+  } | null> {
+    try {
+      const profile = await this.prisma.client.orm.public.JobSeekerProfile
+        .where({ userId })
+        .first();
+
+      if (!profile) {
+        return null;
+      }
+
+      // Fetch assigned skills
+      let skillNames: string[] = [];
+      try {
+        const profileSkills = await this.prisma.client.orm.public.ProfileSkill
+          .where({ profileId: profile.id })
+          .all();
+
+        if (profileSkills && profileSkills.length > 0) {
+          const skills = await Promise.all(
+            profileSkills.map((ps) =>
+              this.prisma.client.orm.public.Skill.where({ id: ps.skillId }).first(),
+            ),
+          );
+          skillNames = skills
+            .filter((s): s is NonNullable<typeof s> => Boolean(s?.name))
+            .map((s) => s.name.toLowerCase());
+        }
+      } catch (err) {
+        this.logger.debug(`Could not load candidate skills for ranking: ${err}`);
+      }
+
+      // Fetch past experience titles
+      let experienceTitles: string[] = [];
+      try {
+        const experiences = await this.prisma.client.orm.public.ExperienceRecord
+          .where({ profileId: profile.id })
+          .all();
+
+        if (experiences && experiences.length > 0) {
+          experienceTitles = experiences
+            .filter((e) => Boolean(e?.title))
+            .map((e) => e.title.toLowerCase());
+        }
+      } catch (err) {
+        this.logger.debug(`Could not load candidate experiences for ranking: ${err}`);
+      }
+
+      return {
+        headline: profile.headline || null,
+        bio: profile.bio || null,
+        location: profile.location || null,
+        skills: skillNames,
+        experienceTitles,
+      };
+    } catch (err) {
+      this.logger.debug(`Could not retrieve candidate profile context: ${err}`);
+      return null;
+    }
+  }
+
+  /**
+   * Upwork-style algorithm to score how closely a job matches a candidate's profile.
+   */
+  private calculateJobRelevanceScore(
+    job: any,
+    context: {
+      headline: string | null;
+      bio: string | null;
+      location: string | null;
+      skills: string[];
+      experienceTitles: string[];
+    },
+  ): number {
+    let score = 0;
+    const jobSkills = (job.skills || []).map((s: string) => s.toLowerCase().trim());
+    const jobTitleLower = (job.title || '').toLowerCase();
+    const jobDescLower = (job.description || '').toLowerCase();
+    const jobCategoryLower = (job.category || '').toLowerCase();
+    const jobLocationLower = (job.location || '').toLowerCase();
+
+    // 1. SKILL MATCHING (Primary Weight: up to 55 points)
+    if (jobSkills.length > 0 && context.skills.length > 0) {
+      let matchedSkillCount = 0;
+      for (const jobSkill of jobSkills) {
+        const isMatched = context.skills.some(
+          (cs) => cs === jobSkill || cs.includes(jobSkill) || jobSkill.includes(cs),
+        );
+        if (isMatched) {
+          matchedSkillCount++;
+          score += 15;
+        }
+      }
+
+      const coverageRatio = matchedSkillCount / jobSkills.length;
+      score += Math.round(coverageRatio * 25);
+    }
+
+    // Candidate skills mentioned in job title/description
+    if (context.skills.length > 0) {
+      for (const cs of context.skills) {
+        if (cs.length > 2) {
+          if (jobTitleLower.includes(cs)) {
+            score += 10;
+          } else if (jobDescLower.includes(cs)) {
+            score += 3;
+          }
+        }
+      }
+    }
+
+    // 2. HEADLINE & EXPERIENCE TITLE MATCHING (High Weight: up to 35 points)
+    if (context.headline) {
+      const headlineWords = context.headline
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, ' ')
+        .split(/\s+/)
+        .filter((w) => w.length > 2 && !['and', 'the', 'for', 'with', 'from'].includes(w));
+
+      for (const word of headlineWords) {
+        if (jobTitleLower.includes(word)) {
+          score += 12;
+        }
+        if (jobCategoryLower.includes(word)) {
+          score += 6;
+        }
+      }
+    }
+
+    if (context.experienceTitles.length > 0) {
+      for (const expTitle of context.experienceTitles) {
+        const expWords = expTitle
+          .replace(/[^a-z0-9\s]/g, ' ')
+          .split(/\s+/)
+          .filter((w) => w.length > 2 && !['and', 'the', 'for', 'with', 'from'].includes(w));
+
+        for (const word of expWords) {
+          if (jobTitleLower.includes(word)) {
+            score += 8;
+          }
+        }
+      }
+    }
+
+    // 3. WORKPLACE & LOCATION MATCHING (Up to 15 points)
+    if (job.workplaceType === 'remote') {
+      score += 10;
+    } else if (context.location && jobLocationLower) {
+      const candidateLoc = context.location.toLowerCase();
+      if (
+        jobLocationLower.includes(candidateLoc) ||
+        candidateLoc.includes(jobLocationLower)
+      ) {
+        score += 15;
+      }
+    }
+
+    // 4. SENIORITY / EXPERIENCE LEVEL MATCHING (Up to 10 points)
+    if (job.experienceLevel) {
+      const level = job.experienceLevel.toLowerCase();
+      const headline = (context.headline || '').toLowerCase();
+      if (level === 'senior' && (headline.includes('senior') || headline.includes('lead') || headline.includes('sr'))) {
+        score += 10;
+      } else if (level === 'lead' && (headline.includes('lead') || headline.includes('principal') || headline.includes('manager'))) {
+        score += 10;
+      } else if (level === 'entry' && (headline.includes('junior') || headline.includes('jr') || headline.includes('entry') || headline.includes('intern'))) {
+        score += 10;
+      } else if (level === 'mid' && !headline.includes('senior') && !headline.includes('junior')) {
+        score += 5;
+      }
+    }
+
+    return score;
+  }
+
+  /**
+   * Search published jobs with personalized profile relevance ranking.
+   */
+  async findPublicJobs(
+    query: QueryJobsDto,
+    currentUser?: AuthUser,
+  ): Promise<{
     total: number;
     page: number;
     limit: number;
@@ -416,16 +603,48 @@ export class JobsService {
       );
     }
 
-    const page = query.page && query.page > 0 ? query.page : 1;
-    const limit = query.limit && query.limit > 0 ? query.limit : 20;
-    const skip = (page - 1) * limit;
-
     const allMatching = await collection
       .orderBy((j) => j.createdAt.desc())
       .all();
 
-    const paginated = allMatching.slice(skip, skip + limit);
-    const jobs = await Promise.all(paginated.map((j) => this.assembleJob(j)));
+    // Context-aware Upwork-style profile relevance ranking
+    let candidateContext = null;
+    if (currentUser?.id && (currentUser.role === 'job_seeker' || !currentUser.role)) {
+      candidateContext = await this.getCandidateProfileContext(currentUser.id);
+    }
+
+    let rankedJobs: { job: any; relevanceScore?: number }[] = allMatching.map((job) => ({ job }));
+    if (candidateContext) {
+      const scoredJobs = allMatching.map((job) => ({
+        job,
+        relevanceScore: this.calculateJobRelevanceScore(job, candidateContext!),
+      }));
+
+      // Sort descending by relevance score (highest relevance at top, least related at bottom)
+      scoredJobs.sort((a, b) => {
+        if (b.relevanceScore !== a.relevanceScore) {
+          return b.relevanceScore - a.relevanceScore;
+        }
+        return new Date(b.job.createdAt).getTime() - new Date(a.job.createdAt).getTime();
+      });
+
+      rankedJobs = scoredJobs;
+    }
+
+    const page = query.page && query.page > 0 ? query.page : 1;
+    const limit = query.limit && query.limit > 0 ? query.limit : 20;
+    const skip = (page - 1) * limit;
+
+    const paginated = rankedJobs.slice(skip, skip + limit);
+    const jobs = await Promise.all(
+      paginated.map(async ({ job, relevanceScore }) => {
+        const assembled = await this.assembleJob(job);
+        if (relevanceScore !== undefined) {
+          assembled.relevanceScore = relevanceScore;
+        }
+        return assembled;
+      }),
+    );
 
     return {
       total: allMatching.length,
