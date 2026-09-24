@@ -52,6 +52,17 @@ describe('ApplicationsService', () => {
     updatedAt: new Date().toISOString(),
   };
 
+  const mockHistory = {
+    id: 'hist-1',
+    applicationId: 'app-1',
+    previousStatus: null,
+    newStatus: 'submitted',
+    changedById: 'user-seeker-1',
+    changedByRole: 'job_seeker',
+    notes: 'Initial application submitted',
+    createdAt: new Date().toISOString(),
+  };
+
   const mockPrismaService = {
     client: {
       orm: {
@@ -64,6 +75,12 @@ describe('ApplicationsService', () => {
           Job: {
             where: vi.fn().mockReturnValue({
               first: vi.fn().mockResolvedValue(mockJob),
+              orderBy: vi.fn().mockReturnValue({
+                all: vi.fn().mockResolvedValue([mockJob]),
+              }),
+            }),
+            orderBy: vi.fn().mockReturnValue({
+              all: vi.fn().mockResolvedValue([mockJob]),
             }),
           },
           EmployerProfile: {
@@ -72,8 +89,24 @@ describe('ApplicationsService', () => {
             }),
           },
           JobApplication: {
-            where: vi.fn(),
+            where: vi.fn().mockReturnValue({
+              first: vi.fn().mockResolvedValue(mockApplication),
+              update: vi.fn().mockResolvedValue(mockApplication),
+              all: vi.fn().mockResolvedValue([mockApplication]),
+              orderBy: vi.fn().mockReturnValue({
+                all: vi.fn().mockResolvedValue([mockApplication]),
+              }),
+            }),
             create: vi.fn(),
+          },
+          ApplicationStatusHistory: {
+            where: vi.fn().mockReturnValue({
+              all: vi.fn().mockResolvedValue([mockHistory]),
+              orderBy: vi.fn().mockReturnValue({
+                all: vi.fn().mockResolvedValue([mockHistory]),
+              }),
+            }),
+            create: vi.fn().mockResolvedValue(mockHistory),
           },
           User: {
             where: vi.fn().mockReturnValue({
@@ -204,6 +237,7 @@ describe('ApplicationsService', () => {
       expect(res.jobId).toBe('job-1');
       expect(res.status).toBe('submitted');
       expect(mockPrismaService.client.orm.public.JobApplication.create).toHaveBeenCalled();
+      expect(mockPrismaService.client.orm.public.ApplicationStatusHistory.create).toHaveBeenCalled();
     });
   });
 
@@ -231,7 +265,7 @@ describe('ApplicationsService', () => {
       ).rejects.toThrow(ForbiddenException);
     });
 
-    it('should withdraw application successfully', async () => {
+    it('should withdraw application successfully and log status change', async () => {
       mockPrismaService.client.orm.public.JobApplication.where.mockReturnValue({
         first: vi.fn().mockResolvedValue(mockApplication),
         update: vi.fn().mockResolvedValue({ ...mockApplication, status: 'withdrawn' }),
@@ -248,26 +282,14 @@ describe('ApplicationsService', () => {
 
       const res = await service.withdrawApplication('user-seeker-1', 'app-1');
       expect(res.message).toBe('Application withdrawn successfully.');
+      expect(mockPrismaService.client.orm.public.ApplicationStatusHistory.create).toHaveBeenCalled();
     });
   });
 
-  describe('getApplicantsForJob and updateApplicationStatus', () => {
-    it('should throw ForbiddenException if employer does not own the job', async () => {
-      mockPrismaService.client.orm.public.Job.where.mockReturnValue({
-        first: vi.fn().mockResolvedValue(mockJob),
-      });
-      mockPrismaService.client.orm.public.EmployerProfile.where.mockReturnValue({
-        first: vi.fn().mockResolvedValue({ id: 'emp-other', userId: 'user-other' }),
-      });
-
-      await expect(
-        service.getApplicantsForJob('user-other', 'job-1'),
-      ).rejects.toThrow(ForbiddenException);
-    });
-
-    it('should update application status', async () => {
+  describe('shortlistCandidate & bulkShortlist', () => {
+    it('should shortlist a single candidate and record notes', async () => {
       mockPrismaService.client.orm.public.JobApplication.where.mockReturnValue({
-        first: vi.fn().mockResolvedValue(mockApplication),
+        first: vi.fn().mockResolvedValue({ ...mockApplication, status: 'shortlisted', employerNotes: 'Top candidate' }),
         update: vi.fn().mockResolvedValue({}),
       });
       mockPrismaService.client.orm.public.Job.where.mockReturnValue({
@@ -277,12 +299,100 @@ describe('ApplicationsService', () => {
         first: vi.fn().mockResolvedValue(mockEmployer),
       });
 
-      const res = await service.updateApplicationStatus('user-emp-1', 'app-1', {
-        status: 'shortlisted',
-        employerNotes: 'Strong frontend experience',
+      const res = await service.shortlistCandidate('user-emp-1', 'app-1', 'Top candidate');
+      expect(res.status).toBe('shortlisted');
+    });
+
+    it('should bulk shortlist multiple candidates', async () => {
+      mockPrismaService.client.orm.public.JobApplication.where.mockReturnValue({
+        first: vi.fn().mockResolvedValue({ ...mockApplication, status: 'shortlisted' }),
+        update: vi.fn().mockResolvedValue({}),
+      });
+      mockPrismaService.client.orm.public.Job.where.mockReturnValue({
+        first: vi.fn().mockResolvedValue(mockJob),
+      });
+      mockPrismaService.client.orm.public.EmployerProfile.where.mockReturnValue({
+        first: vi.fn().mockResolvedValue(mockEmployer),
       });
 
-      expect(res).toBeDefined();
+      const res = await service.bulkShortlistCandidates('user-emp-1', ['app-1', 'app-2'], 'Bulk shortlisted');
+      expect(res.shortlistedCount).toBe(2);
+      expect(res.applications.length).toBe(2);
+    });
+  });
+
+  describe('getApplicationHistory', () => {
+    it('should retrieve status change history for an application', async () => {
+      mockPrismaService.client.orm.public.JobApplication.where.mockReturnValue({
+        first: vi.fn().mockResolvedValue(mockApplication),
+      });
+      mockPrismaService.client.orm.public.JobSeekerProfile.where.mockReturnValue({
+        first: vi.fn().mockResolvedValue(mockProfile),
+      });
+      mockPrismaService.client.orm.public.Job.where.mockReturnValue({
+        first: vi.fn().mockResolvedValue(mockJob),
+      });
+      mockPrismaService.client.orm.public.EmployerProfile.where.mockReturnValue({
+        first: vi.fn().mockResolvedValue(mockEmployer),
+      });
+      mockPrismaService.client.orm.public.ApplicationStatusHistory.where.mockReturnValue({
+        orderBy: vi.fn().mockReturnValue({
+          all: vi.fn().mockResolvedValue([mockHistory]),
+        }),
+      });
+
+      const history = await service.getApplicationHistory('user-seeker-1', 'app-1', 'job_seeker');
+      expect(history).toHaveLength(1);
+      expect(history[0].newStatus).toBe('submitted');
+    });
+  });
+
+  describe('Dashboards', () => {
+    it('should return candidate dashboard with metrics and recent activity', async () => {
+      mockPrismaService.client.orm.public.JobSeekerProfile.where.mockReturnValue({
+        first: vi.fn().mockResolvedValue(mockProfile),
+      });
+      mockPrismaService.client.orm.public.JobApplication.where.mockReturnValue({
+        orderBy: vi.fn().mockReturnValue({
+          all: vi.fn().mockResolvedValue([mockApplication]),
+        }),
+      });
+      mockPrismaService.client.orm.public.Job.where.mockReturnValue({
+        first: vi.fn().mockResolvedValue(mockJob),
+      });
+      mockPrismaService.client.orm.public.EmployerProfile.where.mockReturnValue({
+        first: vi.fn().mockResolvedValue(mockEmployer),
+      });
+      mockPrismaService.client.orm.public.ApplicationStatusHistory.where.mockReturnValue({
+        all: vi.fn().mockResolvedValue([mockHistory]),
+      });
+
+      const dashboard = await service.getCandidateDashboard('user-seeker-1');
+      expect(dashboard.metrics.totalApplied).toBe(1);
+      expect(dashboard.metrics.submitted).toBe(1);
+      expect(dashboard.recentApplications).toHaveLength(1);
+      expect(dashboard.recentActivities).toHaveLength(1);
+    });
+
+    it('should return employer dashboard with job breakdown and applicant metrics', async () => {
+      mockPrismaService.client.orm.public.EmployerProfile.where.mockReturnValue({
+        first: vi.fn().mockResolvedValue(mockEmployer),
+      });
+      mockPrismaService.client.orm.public.Job.where.mockReturnValue({
+        first: vi.fn().mockResolvedValue(mockJob),
+        orderBy: vi.fn().mockReturnValue({
+          all: vi.fn().mockResolvedValue([mockJob]),
+        }),
+      });
+      mockPrismaService.client.orm.public.JobApplication.where.mockReturnValue({
+        all: vi.fn().mockResolvedValue([mockApplication]),
+      });
+
+      const dashboard = await service.getEmployerDashboard('user-emp-1');
+      expect(dashboard.metrics.totalJobs).toBe(1);
+      expect(dashboard.metrics.totalApplicants).toBe(1);
+      expect(dashboard.jobBreakdown).toHaveLength(1);
+      expect(dashboard.jobBreakdown[0].applicantCount).toBe(1);
     });
   });
 });

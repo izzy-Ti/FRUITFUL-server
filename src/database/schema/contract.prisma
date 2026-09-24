@@ -208,3 +208,18 @@ model JobApplication {
   @@index([profileId])
   @@index([status])
 }
+
+model ApplicationStatusHistory {
+  id             String   @id
+  applicationId  String
+  application    JobApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  previousStatus String?
+  newStatus      String
+  changedById    String?
+  changedByRole  String?
+  notes          String?
+  createdAt      TimestamptzString @default(now())
+
+  @@index([applicationId])
+  @@index([newStatus])
+}

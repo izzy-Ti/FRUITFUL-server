@@ -4,6 +4,10 @@
   "target": "postgres",
   "profileHash": "3916f444a8a17ad749191acf9e08dad97d1a327b88c2f1d45d12f240296aa8b2",
   "roots": {
+    "applicationStatusHistory": {
+      "model": "ApplicationStatusHistory",
+      "namespace": "public"
+    },
     "educationRecord": {
       "model": "EducationRecord",
       "namespace": "public"
@@ -57,6 +61,114 @@
     "namespaces": {
       "public": {
         "models": {
+          "ApplicationStatusHistory": {
+            "fields": {
+              "applicationId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "changedById": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "changedByRole": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "createdAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "newStatus": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "notes": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "previousStatus": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              }
+            },
+            "relations": {
+              "application": {
+                "cardinality": "N:1",
+                "nullable": false,
+                "on": {
+                  "localFields": [
+                    "applicationId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "JobApplication",
+                  "namespace": "public"
+                }
+              }
+            },
+            "storage": {
+              "fields": {
+                "applicationId": {
+                  "column": "applicationId"
+                },
+                "changedById": {
+                  "column": "changedById"
+                },
+                "changedByRole": {
+                  "column": "changedByRole"
+                },
+                "createdAt": {
+                  "column": "createdAt"
+                },
+                "id": {
+                  "column": "id"
+                },
+                "newStatus": {
+                  "column": "newStatus"
+                },
+                "notes": {
+                  "column": "notes"
+                },
+                "previousStatus": {
+                  "column": "previousStatus"
+                }
+              },
+              "namespaceId": "public",
+              "table": "applicationStatusHistory"
+            }
+          },
           "EducationRecord": {
             "fields": {
               "createdAt": {
@@ -1726,6 +1838,97 @@
       "public": {
         "entries": {
           "table": {
+            "applicationStatusHistory": {
+              "columns": {
+                "applicationId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "changedById": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "changedByRole": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "createdAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "default": {
+                    "expression": "now()",
+                    "kind": "function"
+                  },
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                },
+                "id": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "newStatus": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "notes": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "previousStatus": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                }
+              },
+              "foreignKeys": [
+                {
+                  "onDelete": "cascade",
+                  "source": {
+                    "columns": [
+                      "applicationId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "applicationStatusHistory"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "jobApplication"
+                  }
+                }
+              ],
+              "indexes": [
+                {
+                  "columns": [
+                    "applicationId"
+                  ],
+                  "name": "applicationStatusHistory_applicationId_idx_8158f91a",
+                  "prefix": "applicationStatusHistory_applicationId_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "newStatus"
+                  ],
+                  "name": "applicationStatusHistory_newStatus_idx_e15e070d",
+                  "prefix": "applicationStatusHistory_newStatus_idx",
+                  "unique": false
+                }
+              ],
+              "primaryKey": {
+                "columns": [
+                  "id"
+                ]
+              },
+              "uniques": []
+            },
             "educationRecord": {
               "columns": {
                 "createdAt": {
@@ -3077,7 +3280,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "88c81325afde109e996093a1f6d37606d0fa7d2f0f1f6f190ab0c978e1cf267d"
+    "storageHash": "863a2542a37e922d30137e20abebda85433fcb6684075538ac170f151b4b697b"
   },
   "execution": {
     "executionHash": "e28fbdd5e7f41d93e8261bc619ac194ed5b6e6f504166905f42afb59c0b91bdf",

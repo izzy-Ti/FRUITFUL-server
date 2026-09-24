@@ -247,6 +247,15 @@ export class ApplicationsService {
           appliedAt: nowIso,
         });
 
+      await this.recordStatusChange(
+        existing.id,
+        existing.status,
+        'submitted',
+        userId,
+        'job_seeker',
+        'Re-applied after withdrawal',
+      );
+
       const updated = await this.prisma.client.orm.public.JobApplication
         .where({ id: existing.id })
         .first();
@@ -266,6 +275,15 @@ export class ApplicationsService {
       employerNotes: null,
       appliedAt: nowIso,
     });
+
+    await this.recordStatusChange(
+      application.id,
+      null,
+      'submitted',
+      userId,
+      'job_seeker',
+      'Initial application submitted',
+    );
 
     this.logger.log(`Job seeker ${userId} submitted application for job ${dto.jobId}.`);
     return this.assembleApplication(application);
@@ -311,6 +329,15 @@ export class ApplicationsService {
       .update({
         status: 'withdrawn',
       });
+
+    await this.recordStatusChange(
+      application.id,
+      application.status,
+      'withdrawn',
+      userId,
+      'job_seeker',
+      'Application withdrawn by candidate',
+    );
 
     const updated = await this.prisma.client.orm.public.JobApplication
       .where({ id: applicationId })
@@ -446,12 +473,288 @@ export class ApplicationsService {
         employerNotes: dto.employerNotes !== undefined ? dto.employerNotes : application.employerNotes,
       });
 
+    if (application.status !== dto.status) {
+      await this.recordStatusChange(
+        application.id,
+        application.status,
+        dto.status,
+        userId,
+        isAdmin ? 'admin' : 'employer',
+        dto.employerNotes || null,
+      );
+    }
+
     const updated = await this.prisma.client.orm.public.JobApplication
       .where({ id: applicationId })
       .first();
 
     this.logger.log(`Application ${applicationId} status updated to "${dto.status}".`);
     return this.assembleApplication(updated!, true);
+  }
+
+  /**
+   * Helper to record an application status change event into history.
+   */
+  private async recordStatusChange(
+    applicationId: string,
+    previousStatus: string | null,
+    newStatus: string,
+    changedById?: string | null,
+    changedByRole?: string | null,
+    notes?: string | null,
+  ): Promise<void> {
+    try {
+      await this.prisma.client.orm.public.ApplicationStatusHistory.create({
+        id: randomUUID(),
+        applicationId,
+        previousStatus,
+        newStatus,
+        changedById: changedById || null,
+        changedByRole: changedByRole || null,
+        notes: notes || null,
+      });
+    } catch (err) {
+      this.logger.warn(`Failed to record application status history for ${applicationId}:`, err);
+    }
+  }
+
+  /**
+   * Employer: Shortlist a candidate for a job.
+   */
+  async shortlistCandidate(
+    userId: string,
+    applicationId: string,
+    notes?: string,
+    isAdmin = false,
+  ): Promise<FullApplication> {
+    return this.updateApplicationStatus(
+      userId,
+      applicationId,
+      {
+        status: 'shortlisted',
+        employerNotes: notes,
+      },
+      isAdmin,
+    );
+  }
+
+  /**
+   * Employer: Bulk shortlist multiple candidates.
+   */
+  async bulkShortlistCandidates(
+    userId: string,
+    applicationIds: string[],
+    notes?: string,
+    isAdmin = false,
+  ): Promise<{ shortlistedCount: number; applications: FullApplication[] }> {
+    const results: FullApplication[] = [];
+
+    for (const id of applicationIds) {
+      try {
+        const app = await this.shortlistCandidate(userId, id, notes, isAdmin);
+        results.push(app);
+      } catch (err) {
+        this.logger.warn(`Failed to shortlist application ${id}:`, err);
+      }
+    }
+
+    return {
+      shortlistedCount: results.length,
+      applications: results,
+    };
+  }
+
+  /**
+   * Retrieve application status transition history.
+   */
+  async getApplicationHistory(
+    userId: string,
+    applicationId: string,
+    userRole: string,
+  ) {
+    // Verify viewer has access to the application
+    await this.getApplicationById(userId, applicationId, userRole);
+
+    const history = await this.prisma.client.orm.public.ApplicationStatusHistory
+      .where({ applicationId })
+      .orderBy((h) => h.createdAt.desc())
+      .all();
+
+    return history;
+  }
+
+  /**
+   * Candidate Application Dashboard.
+   */
+  async getCandidateDashboard(userId: string) {
+    const profile = await this.prisma.client.orm.public.JobSeekerProfile
+      .where({ userId })
+      .first();
+
+    if (!profile) {
+      return {
+        metrics: {
+          totalApplied: 0,
+          activeApplications: 0,
+          submitted: 0,
+          reviewed: 0,
+          shortlisted: 0,
+          interviewing: 0,
+          hired: 0,
+          rejected: 0,
+          withdrawn: 0,
+        },
+        recentApplications: [],
+        recentActivities: [],
+      };
+    }
+
+    const applications = await this.prisma.client.orm.public.JobApplication
+      .where({ profileId: profile.id })
+      .orderBy((a) => a.appliedAt.desc())
+      .all();
+
+    const metrics = {
+      totalApplied: applications.length,
+      activeApplications: applications.filter(
+        (a) => a.status !== 'withdrawn' && a.status !== 'rejected',
+      ).length,
+      submitted: applications.filter((a) => a.status === 'submitted').length,
+      reviewed: applications.filter((a) => a.status === 'reviewed' || a.status === 'under_review').length,
+      shortlisted: applications.filter((a) => a.status === 'shortlisted').length,
+      interviewing: applications.filter(
+        (a) => a.status === 'interview_scheduled' || a.status === 'interviewed',
+      ).length,
+      hired: applications.filter((a) => a.status === 'hired').length,
+      rejected: applications.filter((a) => a.status === 'rejected').length,
+      withdrawn: applications.filter((a) => a.status === 'withdrawn').length,
+    };
+
+    const recentApps = await Promise.all(
+      applications.slice(0, 5).map((app) => this.assembleApplication(app)),
+    );
+
+    // Fetch recent status history entries for candidate's applications
+    const appIds = applications.map((a) => a.id);
+    let recentActivities: any[] = [];
+    if (appIds.length > 0) {
+      const allHistories = await Promise.all(
+        appIds.map((id) =>
+          this.prisma.client.orm.public.ApplicationStatusHistory
+            .where({ applicationId: id })
+            .all(),
+        ),
+      );
+      recentActivities = allHistories
+        .flat()
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+        .slice(0, 10);
+    }
+
+    return {
+      metrics,
+      recentApplications: recentApps,
+      recentActivities,
+    };
+  }
+
+  /**
+   * Employer Applicant Dashboard.
+   */
+  async getEmployerDashboard(userId: string, isAdmin = false) {
+    let employerId: string | null = null;
+    let employerProfile: any = null;
+
+    if (!isAdmin) {
+      employerProfile = await this.prisma.client.orm.public.EmployerProfile
+        .where({ userId })
+        .first();
+
+      if (!employerProfile) {
+        return {
+          metrics: {
+            totalJobs: 0,
+            publishedJobs: 0,
+            draftJobs: 0,
+            closedJobs: 0,
+            totalApplicants: 0,
+            newApplicants: 0,
+            reviewed: 0,
+            shortlisted: 0,
+            hired: 0,
+            rejected: 0,
+          },
+          jobBreakdown: [],
+          recentApplicants: [],
+        };
+      }
+      employerId = employerProfile.id;
+    }
+
+    let jobsCollection = this.prisma.client.orm.public.Job;
+    if (employerId) {
+      jobsCollection = jobsCollection.where({ employerId });
+    }
+
+    const jobs = await jobsCollection
+      .orderBy((j) => j.createdAt.desc())
+      .all();
+
+    const jobIds = jobs.map((j) => j.id);
+
+    // Fetch all applications for these jobs
+    let allApplications: any[] = [];
+    if (jobIds.length > 0) {
+      const appsNested = await Promise.all(
+        jobIds.map((id) =>
+          this.prisma.client.orm.public.JobApplication.where({ jobId: id }).all(),
+        ),
+      );
+      allApplications = appsNested.flat();
+    }
+
+    const metrics = {
+      totalJobs: jobs.length,
+      publishedJobs: jobs.filter((j) => j.status === 'published').length,
+      draftJobs: jobs.filter((j) => j.status === 'draft').length,
+      closedJobs: jobs.filter((j) => j.status === 'closed').length,
+      totalApplicants: allApplications.length,
+      newApplicants: allApplications.filter((a) => a.status === 'submitted').length,
+      reviewed: allApplications.filter((a) => a.status === 'reviewed' || a.status === 'under_review').length,
+      shortlisted: allApplications.filter((a) => a.status === 'shortlisted').length,
+      hired: allApplications.filter((a) => a.status === 'hired').length,
+      rejected: allApplications.filter((a) => a.status === 'rejected').length,
+    };
+
+    const jobBreakdown = jobs.map((job) => {
+      const jobApps = allApplications.filter((a) => a.jobId === job.id);
+      return {
+        id: job.id,
+        title: job.title,
+        status: job.status,
+        category: job.category,
+        employmentType: job.employmentType,
+        applicantCount: jobApps.length,
+        newApplicantCount: jobApps.filter((a) => a.status === 'submitted').length,
+        shortlistedCount: jobApps.filter((a) => a.status === 'shortlisted').length,
+        hiredCount: jobApps.filter((a) => a.status === 'hired').length,
+      };
+    });
+
+    // Recent 10 applicants
+    const sortedApps = [...allApplications]
+      .sort((a, b) => new Date(b.appliedAt).getTime() - new Date(a.appliedAt).getTime())
+      .slice(0, 10);
+
+    const recentApplicants = await Promise.all(
+      sortedApps.map((app) => this.assembleApplication(app, true)),
+    );
+
+    return {
+      metrics,
+      jobBreakdown,
+      recentApplicants,
+    };
   }
 
   /**
