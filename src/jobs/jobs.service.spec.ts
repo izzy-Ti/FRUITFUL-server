@@ -51,6 +51,7 @@ describe('JobsService', () => {
           },
           Job: {
             where: vi.fn(),
+            orderBy: vi.fn(),
             create: vi.fn(),
             delete: vi.fn(),
           },
