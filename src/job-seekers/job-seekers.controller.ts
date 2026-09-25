@@ -90,7 +90,7 @@ export class JobSeekersController {
   @UseGuards(AuthGuard)
   async searchTalent(
     @CurrentUser() viewer: AuthUser,
-    @Query() query?: QueryTalentDto,
+    @Query() query?: QueryTalentDto | string,
     legacyLocation?: string,
     legacyIsAvailable?: string,
     legacyLimit?: number,

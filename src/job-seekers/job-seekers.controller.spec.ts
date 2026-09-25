@@ -31,6 +31,12 @@ describe('JobSeekersController', () => {
     education: [],
     experience: [],
     skills: [],
+    user: {
+      id: 'user-1',
+      email: 'seeker@example.com',
+      name: 'Jane Doe',
+      role: 'job_seeker',
+    },
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
@@ -120,7 +126,7 @@ describe('JobSeekersController', () => {
       const res = await controller.getProfileById('profile-1', undefined);
       expect(res.phone).toBeNull();
       expect(res.cvUrl).toBeNull();
-      expect(res.user.email).toBe('***@***.***');
+      expect(res.user?.email).toBe('***@***.***');
       expect(mockJobSeekersService.getFullProfileById).toHaveBeenCalledWith('profile-1', undefined);
     });
 

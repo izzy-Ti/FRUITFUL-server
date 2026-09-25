@@ -131,9 +131,9 @@ describe('AdminController', () => {
     });
 
     it('should remove job', async () => {
-      mockAdminService.removeJob.mockResolvedValue({ success: true });
+      mockAdminService.removeJob.mockResolvedValue({ message: 'Job deleted successfully.' });
       const res = await controller.removeJob(mockAdminUser, 'job-1');
-      expect(res.success).toBe(true);
+      expect(res.message).toBe('Job deleted successfully.');
     });
   });
 
