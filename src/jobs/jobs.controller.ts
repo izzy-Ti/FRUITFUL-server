@@ -35,9 +35,9 @@ export class JobsController {
    * Requires authentication. Ranks jobs by profile relevance for candidates.
    */
   @Get()
-  @UseGuards(AuthGuard)
+  @UseGuards(OptionalAuthGuard)
   async findPublicJobs(
-    @CurrentUser() user: AuthUser,
+    @CurrentUser() user: AuthUser | undefined,
     @Query() query: QueryJobsDto,
   ) {
     return this.jobsService.findPublicJobs(query, user);
