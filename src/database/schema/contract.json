@@ -1187,6 +1187,27 @@
           },
           "JobSeekerProfile": {
             "fields": {
+              "adminNotes": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "approvalStatus": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "approvedAt": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
               "bio": {
                 "nullable": true,
                 "type": {
@@ -1300,6 +1321,15 @@
             },
             "storage": {
               "fields": {
+                "adminNotes": {
+                  "column": "adminNotes"
+                },
+                "approvalStatus": {
+                  "column": "approvalStatus"
+                },
+                "approvedAt": {
+                  "column": "approvedAt"
+                },
                 "bio": {
                   "column": "bio"
                 },
@@ -2745,6 +2775,25 @@
                 }
               ],
               "columns": {
+                "adminNotes": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "approvalStatus": {
+                  "codecId": "pg/text@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": "approved"
+                  },
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "approvedAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "nativeType": "timestamptz",
+                  "nullable": true
+                },
                 "bio": {
                   "codecId": "pg/text@1",
                   "nativeType": "text",
@@ -2843,7 +2892,16 @@
                   }
                 }
               ],
-              "indexes": [],
+              "indexes": [
+                {
+                  "columns": [
+                    "approvalStatus"
+                  ],
+                  "name": "jobSeekerProfile_approvalStatus_idx_d15e1cde",
+                  "prefix": "jobSeekerProfile_approvalStatus_idx",
+                  "unique": false
+                }
+              ],
               "primaryKey": {
                 "columns": [
                   "id"
@@ -3280,7 +3338,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "863a2542a37e922d30137e20abebda85433fcb6684075538ac170f151b4b697b"
+    "storageHash": "705060e2cae10f6596532f98cdc656db9a0274187e2aeffcff802568d6c19d16"
   },
   "execution": {
     "executionHash": "e28fbdd5e7f41d93e8261bc619ac194ed5b6e6f504166905f42afb59c0b91bdf",

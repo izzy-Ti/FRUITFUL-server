@@ -3,6 +3,7 @@ import {
   Get,
   Put,
   Post,
+  Patch,
   Delete,
   Body,
   Param,
@@ -23,6 +24,8 @@ import {
   UpdateSkillAssignmentDto,
   CreatePortfolioProjectDto,
   UpdatePortfolioProjectDto,
+  QueryTalentDto,
+  ModerateTalentDto,
 } from './dto/index.js';
 import { AuthGuard } from '../auth/guards/auth.guard.js';
 import { RolesGuard } from '../auth/guards/roles.guard.js';
@@ -73,21 +76,58 @@ export class JobSeekersController {
   @UseGuards(AuthGuard)
   async searchTalent(
     @CurrentUser() viewer: AuthUser,
-    @Query('search') search?: string,
-    @Query('location') location?: string,
-    @Query('isAvailable') isAvailable?: string,
-    @Query('limit') limit?: number,
+    @Query() query?: QueryTalentDto,
+    legacyLocation?: string,
+    legacyIsAvailable?: string,
+    legacyLimit?: number,
   ) {
+    let dto: QueryTalentDto;
+    if (typeof query === 'string') {
+      dto = {
+        search: query,
+        location: legacyLocation,
+        isAvailable: legacyIsAvailable !== undefined ? legacyIsAvailable === 'true' : undefined,
+        limit: legacyLimit ? Number(legacyLimit) : undefined,
+      };
+    } else {
+      dto = query || {};
+    }
+
     const results = await this.jobSeekersService.searchTalent({
-      search,
-      location,
-      isAvailable: isAvailable !== undefined ? isAvailable === 'true' : undefined,
-      limit: limit ? Number(limit) : undefined,
+      ...dto,
       viewerRole: viewer?.role,
     });
     return {
       count: results.length,
       jobSeekers: results,
+    };
+  }
+
+  @Get('discovery')
+  @UseGuards(AuthGuard)
+  async discoverTalent(
+    @CurrentUser() viewer: AuthUser,
+    @Query() query?: QueryTalentDto,
+  ) {
+    return this.searchTalent(viewer, query);
+  }
+
+  @Patch('profile/:id/approval')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles(Role.ADMIN)
+  async moderateProfileApproval(
+    @CurrentUser() admin: AuthUser,
+    @Param('id') profileId: string,
+    @Body() dto: ModerateTalentDto,
+  ) {
+    const profile = await this.jobSeekersService.moderateTalentProfile(
+      admin.id,
+      profileId,
+      dto,
+    );
+    return {
+      message: `Profile status updated to ${dto.approvalStatus}.`,
+      profile,
     };
   }
 

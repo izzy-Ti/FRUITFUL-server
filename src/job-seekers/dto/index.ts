@@ -7,3 +7,5 @@ export * from './assign-skill.dto.js';
 export * from './update-skill-assignment.dto.js';
 export * from './create-portfolio-project.dto.js';
 export * from './update-portfolio-project.dto.js';
+export * from './query-talent.dto.js';
+export * from './moderate-talent.dto.js';

@@ -25,6 +25,11 @@ describe('JobSeekersService', () => {
     phone: '+254700000000',
     cvUrl: 'https://example.com/cv.pdf',
     languages: ['English', 'Swahili'],
+    visibility: 'public',
+    isAvailable: true,
+    approvalStatus: 'approved',
+    approvedAt: new Date().toISOString(),
+    adminNotes: null,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
@@ -442,6 +447,194 @@ describe('JobSeekersService', () => {
       const res = await service.getFullProfileById('profile-1', undefined);
       expect(res.phone).toBeNull();
       expect(res.user?.email).toBe('***@***.***');
+    });
+  });
+
+  describe('Talent Discovery (searchTalent)', () => {
+    let mockQueryChain: any;
+
+    beforeEach(() => {
+      mockQueryChain = {
+        where: vi.fn().mockImplementation(() => mockQueryChain),
+        all: vi.fn().mockResolvedValue([mockProfile]),
+      };
+      mockPrismaService.client.orm.public.JobSeekerProfile.where = mockQueryChain.where;
+      mockPrismaService.client.orm.public.JobSeekerProfile.all = mockQueryChain.all;
+
+      mockPrismaService.client.orm.public.User.where.mockReturnValue({
+        first: vi.fn().mockResolvedValue(mockUser),
+      });
+      mockPrismaService.client.orm.public.EducationRecord.where.mockReturnValue({
+        orderBy: vi.fn().mockReturnValue({ all: vi.fn().mockResolvedValue([mockEducation]) }),
+      });
+      mockPrismaService.client.orm.public.ExperienceRecord.where.mockReturnValue({
+        orderBy: vi.fn().mockReturnValue({ all: vi.fn().mockResolvedValue([mockExperience]) }),
+      });
+      mockPrismaService.client.orm.public.ProfileSkill.where.mockReturnValue({
+        all: vi.fn().mockResolvedValue([mockProfileSkill]),
+      });
+      mockPrismaService.client.orm.public.Skill.where.mockReturnValue({
+        first: vi.fn().mockResolvedValue(mockSkill),
+      });
+      mockPrismaService.client.orm.public.PortfolioProject.where.mockReturnValue({
+        orderBy: vi.fn().mockReturnValue({ all: vi.fn().mockResolvedValue([]) }),
+      });
+    });
+
+    it('should search approved talent profiles by default', async () => {
+      const results = await service.searchTalent({
+        viewerRole: 'employer',
+      });
+
+      expect(results).toHaveLength(1);
+      expect(results[0].id).toBe('profile-1');
+      expect(results[0].approvalStatus).toBe('approved');
+      expect(results[0].phone).toBe(mockProfile.phone);
+    });
+
+    it('should filter candidate profiles by skills', async () => {
+      const match = await service.searchTalent({
+        skills: 'TypeScript',
+        viewerRole: 'employer',
+      });
+      expect(match).toHaveLength(1);
+
+      const noMatch = await service.searchTalent({
+        skills: 'Rust,Go',
+        viewerRole: 'employer',
+      });
+      expect(noMatch).toHaveLength(0);
+    });
+
+    it('should filter candidate profiles by location', async () => {
+      const match = await service.searchTalent({
+        location: 'Nairobi',
+        viewerRole: 'employer',
+      });
+      expect(match).toHaveLength(1);
+    });
+
+    it('should filter candidate profiles by education', async () => {
+      const matchDegree = await service.searchTalent({
+        education: 'Computer Science',
+        viewerRole: 'employer',
+      });
+      expect(matchDegree).toHaveLength(1);
+
+      const matchInst = await service.searchTalent({
+        institution: 'University of Nairobi',
+        viewerRole: 'employer',
+      });
+      expect(matchInst).toHaveLength(1);
+
+      const noMatch = await service.searchTalent({
+        education: 'Medicine',
+        viewerRole: 'employer',
+      });
+      expect(noMatch).toHaveLength(0);
+    });
+
+    it('should filter candidate profiles by experience and minimum years', async () => {
+      const matchExp = await service.searchTalent({
+        experience: 'Software Developer',
+        viewerRole: 'employer',
+      });
+      expect(matchExp).toHaveLength(1);
+
+      const matchYears = await service.searchTalent({
+        minExperienceYears: 2,
+        viewerRole: 'employer',
+      });
+      expect(matchYears).toHaveLength(1);
+
+      const highYears = await service.searchTalent({
+        minExperienceYears: 15,
+        viewerRole: 'employer',
+      });
+      expect(highYears).toHaveLength(0);
+    });
+
+    it('should protect contact information for anonymous/job seeker viewers', async () => {
+      const results = await service.searchTalent({
+        viewerRole: 'job_seeker',
+      });
+
+      expect(results).toHaveLength(1);
+      expect(results[0].phone).toBeNull();
+      expect(results[0].user?.email).toBe('***@***.***');
+    });
+  });
+
+  describe('Operational Moderation (moderateTalentProfile)', () => {
+    it('should approve a talent profile and record approvedAt timestamp', async () => {
+      mockPrismaService.client.orm.public.JobSeekerProfile.where.mockReturnValue({
+        first: vi.fn().mockResolvedValue(mockProfile),
+        update: vi.fn().mockResolvedValue({
+          ...mockProfile,
+          approvalStatus: 'approved',
+          approvedAt: new Date().toISOString(),
+        }),
+      });
+
+      vi.spyOn(service, 'getFullProfileById').mockResolvedValue({
+        ...mockProfile,
+        approvalStatus: 'approved',
+        approvedAt: new Date().toISOString(),
+        adminNotes: 'Candidate verified',
+        totalExperienceYears: 3,
+        education: [],
+        experience: [],
+        skills: [],
+        portfolioProjects: [],
+      } as any);
+
+      const res = await service.moderateTalentProfile('admin-1', 'profile-1', {
+        approvalStatus: 'approved' as any,
+        adminNotes: 'Candidate verified',
+      });
+
+      expect(res.approvalStatus).toBe('approved');
+      expect(res.adminNotes).toBe('Candidate verified');
+    });
+
+    it('should reject a talent profile with admin notes', async () => {
+      mockPrismaService.client.orm.public.JobSeekerProfile.where.mockReturnValue({
+        first: vi.fn().mockResolvedValue(mockProfile),
+        update: vi.fn().mockResolvedValue({
+          ...mockProfile,
+          approvalStatus: 'rejected',
+        }),
+      });
+
+      vi.spyOn(service, 'getFullProfileById').mockResolvedValue({
+        ...mockProfile,
+        approvalStatus: 'rejected',
+        adminNotes: 'Incomplete information',
+        totalExperienceYears: 3,
+        education: [],
+        experience: [],
+        skills: [],
+        portfolioProjects: [],
+      } as any);
+
+      const res = await service.moderateTalentProfile('admin-1', 'profile-1', {
+        approvalStatus: 'rejected' as any,
+        adminNotes: 'Incomplete information',
+      });
+
+      expect(res.approvalStatus).toBe('rejected');
+    });
+
+    it('should throw NotFoundException if profile does not exist', async () => {
+      mockPrismaService.client.orm.public.JobSeekerProfile.where.mockReturnValue({
+        first: vi.fn().mockResolvedValue(null),
+      });
+
+      await expect(
+        service.moderateTalentProfile('admin-1', 'non-existent', {
+          approvalStatus: 'approved' as any,
+        }),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 });

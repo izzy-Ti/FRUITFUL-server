@@ -19,6 +19,11 @@ import {
   UpdateSkillAssignmentDto,
   CreatePortfolioProjectDto,
   UpdatePortfolioProjectDto,
+  QueryTalentDto,
+  TalentSortBy,
+  TalentApprovalFilter,
+  ModerateTalentDto,
+  TalentApprovalStatus,
 } from './dto/index.js';
 
 export interface FullJobSeekerProfile {
@@ -33,6 +38,10 @@ export interface FullJobSeekerProfile {
   languages: string[];
   visibility: string;
   isAvailable: boolean;
+  approvalStatus: string;
+  approvedAt?: string | null;
+  adminNotes?: string | null;
+  totalExperienceYears: number;
   user?: {
     id: string;
     email: string | null;
@@ -45,6 +54,33 @@ export interface FullJobSeekerProfile {
   portfolioProjects: any[];
   createdAt: string;
   updatedAt: string;
+}
+
+function calculateTotalExperienceYears(experienceRecords: any[], skills: any[]): number {
+  let totalMonths = 0;
+  for (const exp of experienceRecords || []) {
+    if (!exp.startDate) continue;
+    try {
+      const start = new Date(exp.startDate);
+      const end = exp.isCurrent || !exp.endDate ? new Date() : new Date(exp.endDate);
+      if (!isNaN(start.getTime()) && !isNaN(end.getTime()) && end >= start) {
+        const months =
+          (end.getFullYear() - start.getFullYear()) * 12 +
+          (end.getMonth() - start.getMonth());
+        totalMonths += Math.max(0, months);
+      }
+    } catch {
+      // Ignore unparseable dates
+    }
+  }
+
+  const expYearsFromRecords = Math.round((totalMonths / 12) * 10) / 10;
+  const maxSkillYears = (skills || []).reduce(
+    (max: number, s: any) => Math.max(max, Number(s.yearsOfExperience) || 0),
+    0,
+  );
+
+  return Math.max(expYearsFromRecords, maxSkillYears);
 }
 
 @Injectable()
@@ -181,6 +217,8 @@ export class JobSeekersService {
       .orderBy((p) => p.createdAt.desc())
       .all();
 
+    const totalExperienceYears = calculateTotalExperienceYears(experience, skillsWithMeta);
+
     return {
       id: profile.id,
       userId: profile.userId,
@@ -193,6 +231,10 @@ export class JobSeekersService {
       languages: profile.languages || [],
       visibility: profile.visibility || 'public',
       isAvailable: profile.isAvailable ?? true,
+      approvalStatus: profile.approvalStatus || 'approved',
+      approvedAt: profile.approvedAt || null,
+      adminNotes: profile.adminNotes || null,
+      totalExperienceYears,
       user: user
         ? {
             id: user.id,
@@ -252,57 +294,256 @@ export class JobSeekersService {
   }
 
   /**
-   * Search talent directory with role-aware privacy and filtering.
+   * Search talent directory with role-aware privacy, approval controls, and comprehensive filtering.
+   * Supports filtering by skills, location, education, experience, availability, and approval status.
    */
   async searchTalent(query?: {
     search?: string;
+    skills?: string;
     location?: string;
+    education?: string;
+    institution?: string;
+    experience?: string;
+    minExperienceYears?: number;
     isAvailable?: boolean;
+    approvalStatus?: TalentApprovalFilter | string;
+    sortBy?: TalentSortBy | string;
+    page?: number;
     limit?: number;
     viewerRole?: string;
-  }) {
+  }): Promise<FullJobSeekerProfile[]> {
     let collection = this.prisma.client.orm.public.JobSeekerProfile;
 
-    // Apply visibility filter according to viewer role
+    // 1. Operational Approval Filter:
+    // Only Admin can view unapproved ('pending' or 'rejected') or 'all' profiles.
+    // Non-admins (Employers, Job Seekers, Anonymous) can ONLY discover 'approved' profiles.
+    if (query?.viewerRole === Role.ADMIN) {
+      if (query?.approvalStatus && query.approvalStatus !== TalentApprovalFilter.ALL) {
+        collection = collection.where((p) => p.approvalStatus.eq(query.approvalStatus!));
+      } else if (!query?.approvalStatus) {
+        collection = collection.where((p) => p.approvalStatus.eq('approved'));
+      }
+    } else {
+      collection = collection.where((p) => p.approvalStatus.eq('approved'));
+    }
+
+    // 2. Visibility Filter
     if (query?.viewerRole === Role.EMPLOYER || query?.viewerRole === Role.ADMIN) {
       collection = collection.where((p) => p.visibility.neq('private'));
     } else {
       collection = collection.where((p) => p.visibility.eq('public'));
     }
 
+    // 3. Availability Filter
     if (query?.isAvailable !== undefined) {
       collection = collection.where((p) => p.isAvailable.eq(query.isAvailable!));
     }
 
+    // 4. Location Filter (DB level)
     if (query?.location) {
       const locTerm = `%${query.location.trim().toLowerCase()}%`;
       collection = collection.where((p) => p.location.ilike(locTerm));
     }
 
-    if (query?.search) {
-      const term = `%${query.search.trim().toLowerCase()}%`;
-      collection = collection.where((p) =>
-        p.headline.ilike(term) || p.bio.ilike(term)
+    // Fetch matching candidate profile records
+    const profiles = await collection.all();
+
+    // Assemble full profile data to evaluate relational criteria (skills, education, experience, metadata)
+    const assembled = await Promise.all(
+      profiles.map((p) => this.assembleFullProfile(p)),
+    );
+
+    // Apply relational and deep text filters
+    let filtered = assembled;
+
+    // Filter by skills (comma-separated or single)
+    if (query?.skills) {
+      const skillTerms = query.skills
+        .split(',')
+        .map((s) => s.trim().toLowerCase())
+        .filter(Boolean);
+
+      if (skillTerms.length > 0) {
+        filtered = filtered.filter((profile) => {
+          const profileSkills = profile.skills || [];
+          return skillTerms.some((term) =>
+            profileSkills.some((ps) => {
+              const nameMatch = ps.name?.toLowerCase().includes(term);
+              const catMatch = ps.category?.toLowerCase().includes(term);
+              return nameMatch || catMatch;
+            }),
+          );
+        });
+      }
+    }
+
+    // Filter by education (degree, field of study, or institution)
+    if (query?.education) {
+      const eduTerm = query.education.trim().toLowerCase();
+      filtered = filtered.filter((profile) => {
+        const eduList = profile.education || [];
+        return eduList.some((edu) => {
+          const degreeMatch = edu.degree?.toLowerCase().includes(eduTerm);
+          const fieldMatch = edu.fieldOfStudy?.toLowerCase().includes(eduTerm);
+          const instMatch = edu.institution?.toLowerCase().includes(eduTerm);
+          return degreeMatch || fieldMatch || instMatch;
+        });
+      });
+    }
+
+    // Filter by institution specifically
+    if (query?.institution) {
+      const instTerm = query.institution.trim().toLowerCase();
+      filtered = filtered.filter((profile) => {
+        const eduList = profile.education || [];
+        return eduList.some((edu) => edu.institution?.toLowerCase().includes(instTerm));
+      });
+    }
+
+    // Filter by experience text (title, company, or description)
+    if (query?.experience) {
+      const expTerm = query.experience.trim().toLowerCase();
+      filtered = filtered.filter((profile) => {
+        const expList = profile.experience || [];
+        return expList.some((exp) => {
+          const titleMatch = exp.title?.toLowerCase().includes(expTerm);
+          const companyMatch = exp.company?.toLowerCase().includes(expTerm);
+          const descMatch = exp.description?.toLowerCase().includes(expTerm);
+          return titleMatch || companyMatch || descMatch;
+        });
+      });
+    }
+
+    // Filter by minimum years of experience
+    if (query?.minExperienceYears !== undefined && query.minExperienceYears > 0) {
+      filtered = filtered.filter(
+        (profile) => profile.totalExperienceYears >= query.minExperienceYears!,
       );
     }
 
-    const limit = query?.limit || 20;
-    const profiles = await collection.limit(limit).all();
+    // General search term across headline, bio, location, name, skills, and experience
+    if (query?.search) {
+      const searchTerm = query.search.trim().toLowerCase();
+      filtered = filtered.filter((profile) => {
+        const headlineMatch = profile.headline?.toLowerCase().includes(searchTerm);
+        const bioMatch = profile.bio?.toLowerCase().includes(searchTerm);
+        const nameMatch = profile.user?.name?.toLowerCase().includes(searchTerm);
+        const locMatch = profile.location?.toLowerCase().includes(searchTerm);
+        const skillMatch = (profile.skills || []).some((s) =>
+          s.name?.toLowerCase().includes(searchTerm),
+        );
+        const expMatch = (profile.experience || []).some((e) =>
+          e.title?.toLowerCase().includes(searchTerm) ||
+          e.company?.toLowerCase().includes(searchTerm),
+        );
+        return headlineMatch || bioMatch || nameMatch || locMatch || skillMatch || expMatch;
+      });
+    }
 
+    // Sorting
+    const sortBy = query?.sortBy || TalentSortBy.RELEVANCE;
+
+    if (sortBy === TalentSortBy.EXPERIENCE) {
+      filtered.sort((a, b) => b.totalExperienceYears - a.totalExperienceYears);
+    } else if (sortBy === TalentSortBy.NEWEST) {
+      filtered.sort(
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+      );
+    } else if (sortBy === TalentSortBy.NAME) {
+      filtered.sort((a, b) => {
+        const nameA = a.user?.name || a.headline || '';
+        const nameB = b.user?.name || b.headline || '';
+        return nameA.localeCompare(nameB);
+      });
+    } else {
+      // TalentSortBy.RELEVANCE: Score matching based on relevance
+      const scoreProfile = (p: FullJobSeekerProfile): number => {
+        let score = 0;
+        if (query?.search) {
+          const s = query.search.trim().toLowerCase();
+          if (p.headline?.toLowerCase().includes(s)) score += 20;
+          if (p.user?.name?.toLowerCase().includes(s)) score += 15;
+          if (p.bio?.toLowerCase().includes(s)) score += 10;
+          if ((p.skills || []).some((sk) => sk.name?.toLowerCase().includes(s))) score += 15;
+        }
+        if (query?.skills) {
+          const sTerms = query.skills.split(',').map((x) => x.trim().toLowerCase()).filter(Boolean);
+          const matchedSkills = (p.skills || []).filter((sk) =>
+            sTerms.some(
+              (st) =>
+                sk.name?.toLowerCase().includes(st) ||
+                sk.category?.toLowerCase().includes(st),
+            ),
+          );
+          score += matchedSkills.length * 15;
+        }
+        if (p.isAvailable) score += 5;
+        score += Math.min(p.totalExperienceYears, 10);
+        return score;
+      };
+
+      filtered.sort((a, b) => scoreProfile(b) - scoreProfile(a));
+    }
+
+    // Pagination
+    const page = query?.page && query.page > 0 ? Number(query.page) : 1;
+    const limit = query?.limit && query.limit > 0 ? Number(query.limit) : 20;
+    const startIndex = (page - 1) * limit;
+    const paginated = filtered.slice(startIndex, startIndex + limit);
+
+    // Controlled privacy masking for non-privileged viewers
     const isPrivileged =
       query?.viewerRole === Role.EMPLOYER || query?.viewerRole === Role.ADMIN;
 
-    return Promise.all(
-      profiles.map((p) =>
-        this.assembleFullProfile(p).then((res) => {
-          if (!isPrivileged) {
-            res.phone = null;
-            if (res.user) res.user.email = '***@***.***';
-          }
-          return res;
-        }),
-      ),
+    return paginated.map((p) => {
+      if (!isPrivileged) {
+        return {
+          ...p,
+          phone: null,
+          user: p.user
+            ? {
+                ...p.user,
+                email: '***@***.***',
+              }
+            : null,
+        };
+      }
+      return p;
+    });
+  }
+
+  /**
+   * Operational control for platform admins: approve, reject, or mark talent profile pending.
+   */
+  async moderateTalentProfile(
+    adminUserId: string,
+    profileId: string,
+    dto: ModerateTalentDto,
+  ): Promise<FullJobSeekerProfile> {
+    const existing = await this.prisma.client.orm.public.JobSeekerProfile
+      .where({ id: profileId })
+      .first();
+
+    if (!existing) {
+      throw new NotFoundException(`Job seeker profile with ID "${profileId}" was not found.`);
+    }
+
+    const isApproved = dto.approvalStatus === TalentApprovalStatus.APPROVED;
+    const approvedAt = isApproved ? new Date().toISOString() : null;
+
+    await this.prisma.client.orm.public.JobSeekerProfile
+      .where({ id: profileId })
+      .update({
+        approvalStatus: dto.approvalStatus,
+        approvedAt,
+        ...(dto.adminNotes !== undefined ? { adminNotes: dto.adminNotes } : {}),
+      });
+
+    this.logger.log(
+      `Profile ${profileId} moderated to "${dto.approvalStatus}" by admin ${adminUserId}.`,
     );
+
+    return this.getFullProfileById(profileId, { id: adminUserId, role: Role.ADMIN });
   }
 
   // ==========================================

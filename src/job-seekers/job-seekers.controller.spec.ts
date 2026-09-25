@@ -58,6 +58,7 @@ describe('JobSeekersController', () => {
     getPortfolioProjectById: vi.fn(),
     updatePortfolioProject: vi.fn(),
     deletePortfolioProject: vi.fn(),
+    moderateTalentProfile: vi.fn(),
   };
 
   const mockAuthService = {
@@ -111,6 +112,76 @@ describe('JobSeekersController', () => {
       const res = await controller.searchTalent(mockUser, 'Full Stack', 'Addis Ababa', 'true', 10);
       expect(res.count).toBe(1);
       expect(res.jobSeekers).toEqual([mockProfile]);
+    });
+
+    it('should search talent directory with QueryTalentDto filters', async () => {
+      mockJobSeekersService.searchTalent.mockResolvedValue([mockProfile]);
+
+      const res = await controller.searchTalent(mockUser, {
+        skills: 'TypeScript,React',
+        location: 'Nairobi',
+        education: 'Computer Science',
+        experience: 'Full Stack',
+        minExperienceYears: 3,
+      } as any);
+
+      expect(res.count).toBe(1);
+      expect(mockJobSeekersService.searchTalent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          skills: 'TypeScript,React',
+          location: 'Nairobi',
+          education: 'Computer Science',
+          experience: 'Full Stack',
+          minExperienceYears: 3,
+          viewerRole: 'job_seeker',
+        }),
+      );
+    });
+
+    it('should discover talent through discovery alias', async () => {
+      mockJobSeekersService.searchTalent.mockResolvedValue([mockProfile]);
+
+      const res = await controller.discoverTalent(mockUser, {
+        skills: 'Node.js',
+      } as any);
+
+      expect(res.count).toBe(1);
+      expect(res.jobSeekers).toEqual([mockProfile]);
+    });
+
+    it('should moderate profile approval as admin', async () => {
+      const adminUser: AuthUser = {
+        id: 'admin-1',
+        email: 'admin@example.com',
+        name: 'Admin',
+        emailVerified: true,
+        role: 'admin',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      const moderated = {
+        ...mockProfile,
+        approvalStatus: 'approved',
+        approvedAt: new Date().toISOString(),
+      };
+      mockJobSeekersService.moderateTalentProfile.mockResolvedValue(moderated);
+
+      const res = await controller.moderateProfileApproval(adminUser, 'profile-1', {
+        approvalStatus: 'approved' as any,
+        adminNotes: 'Profile meets quality guidelines',
+      });
+
+      expect(res.message).toBe('Profile status updated to approved.');
+      expect(res.profile.approvalStatus).toBe('approved');
+      expect(mockJobSeekersService.moderateTalentProfile).toHaveBeenCalledWith(
+        'admin-1',
+        'profile-1',
+        {
+          approvalStatus: 'approved',
+          adminNotes: 'Profile meets quality guidelines',
+        },
+      );
     });
   });
 

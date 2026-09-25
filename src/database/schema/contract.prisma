@@ -20,10 +20,15 @@ model JobSeekerProfile {
   phone       String?
   cvUrl       String?
   languages   String[]
-  visibility  String   @default("public")
-  isAvailable Boolean  @default(true)
-  createdAt   TimestamptzString @default(now())
-  updatedAt   temporal.updatedAtString()
+  visibility     String   @default("public")
+  isAvailable    Boolean  @default(true)
+  approvalStatus String   @default("approved")
+  approvedAt     TimestamptzString?
+  adminNotes     String?
+  createdAt      TimestamptzString @default(now())
+  updatedAt      temporal.updatedAtString()
+
+  @@index([approvalStatus])
 }
 
 model PortfolioProject {
