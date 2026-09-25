@@ -1,9 +1,18 @@
-import { Injectable, Logger, BadRequestException, NotFoundException, InternalServerErrorException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  BadRequestException,
+  NotFoundException,
+  ForbiddenException,
+  InternalServerErrorException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { v2 as cloudinary, UploadApiResponse } from 'cloudinary';
 import { Readable } from 'node:stream';
 import { randomUUID } from 'node:crypto';
 import { PrismaService } from '../database/prisma.service.js';
+import { Role } from '../common/enums/role.enum.js';
+import type { AuthUser } from '../auth/auth.service.js';
 
 export interface UploadedFile {
   fieldname?: string;
@@ -102,6 +111,10 @@ export class StorageService {
     if (!file || !file.buffer) {
       throw new BadRequestException('No file or buffer was provided for upload.');
     }
+
+    // Comprehensive file safety validation (extension denylist, magic bytes, SVG sanitization)
+    const sanitizedName = this.validateFileSafety(file);
+    file.originalname = sanitizedName;
 
     if (options.allowedMimeTypes && options.allowedMimeTypes.length > 0) {
       const isAllowed = options.allowedMimeTypes.some((type) => {
@@ -229,9 +242,9 @@ export class StorageService {
   }
 
   /**
-   * Retrieve file metadata record by ID.
+   * Retrieve file metadata record by ID with authorization enforcement.
    */
-  async getFileMetadata(id: string): Promise<FileMetadataRecord> {
+  async getFileMetadata(id: string, user?: AuthUser): Promise<FileMetadataRecord> {
     const file = await this.prisma.client.orm.public.FileMetadata
       .where({ id })
       .first();
@@ -240,7 +253,167 @@ export class StorageService {
       throw new NotFoundException(`File metadata with ID "${id}" was not found.`);
     }
 
-    return file as unknown as FileMetadataRecord;
+    const record = file as unknown as FileMetadataRecord;
+
+    if (user) {
+      const allowed = await this.canAccessFile(user, record);
+      if (!allowed) {
+        throw new ForbiddenException('You do not have permission to access this protected document.');
+      }
+    }
+
+    return record;
+  }
+
+  /**
+   * Check whether a user is authorized to access a specific file.
+   */
+  async canAccessFile(user: AuthUser, file: FileMetadataRecord): Promise<boolean> {
+    // 1. Platform Admin has global access
+    if (user.role === Role.ADMIN) {
+      return true;
+    }
+
+    // 2. Owner has direct access
+    if (file.uploadedById === user.id) {
+      return true;
+    }
+
+    // 3. Public assets (avatars, logos, portfolio screenshots)
+    if (file.entityType === 'image' || file.entityType === 'general') {
+      return true;
+    }
+
+    // 4. Protected CV document: only candidate or employer with an application from candidate
+    if (file.entityType === 'cv') {
+      if (user.role === Role.EMPLOYER) {
+        try {
+          if (!file.uploadedById) return false;
+
+          const profile = await this.prisma.client.orm.public.JobSeekerProfile
+            .where({ userId: file.uploadedById })
+            .first();
+
+          const employer = await this.prisma.client.orm.public.EmployerProfile
+            .where({ userId: user.id })
+            .first();
+
+          if (profile && employer) {
+            const employerJobs = await this.prisma.client.orm.public.Job
+              .where({ employerId: employer.id })
+              .all();
+            const jobIds = new Set(employerJobs.map((j) => j.id));
+
+            const applications = await this.prisma.client.orm.public.JobApplication
+              .where({ profileId: profile.id })
+              .all();
+
+            const hasActiveApplication = applications.some((app) => jobIds.has(app.jobId));
+            if (hasActiveApplication) {
+              return true;
+            }
+          }
+        } catch (err) {
+          this.logger.warn(`Error verifying employer access to CV ${file.id}: ${err}`);
+        }
+      }
+      return false;
+    }
+
+    return false;
+  }
+
+  /**
+   * Retrieve secure access details for an authorized user.
+   */
+  async getFileAccess(id: string, user: AuthUser) {
+    const file = await this.getFileMetadata(id, user);
+    return {
+      authorized: true,
+      fileId: file.id,
+      fileName: file.originalName,
+      mimeType: file.mimeType,
+      size: file.size,
+      downloadUrl: file.secureUrl || file.url,
+      entityType: file.entityType,
+    };
+  }
+
+  /**
+   * Inspect and sanitize uploaded files for web vulnerabilities and execution risks.
+   */
+  private validateFileSafety(file: UploadedFile): string {
+    const originalName = file.originalname || 'unnamed';
+    const cleanName = originalName
+      .replace(/[\0\r\n]/g, '')
+      .replace(/(\.\.[\/\\])+/g, '')
+      .trim();
+
+    // 1. Extension denylist check
+    const lowerName = cleanName.toLowerCase();
+    const DANGEROUS_EXTENSIONS = [
+      '.exe', '.bat', '.cmd', '.sh', '.bash', '.php', '.phtml', '.php3', '.php4', '.php5',
+      '.phps', '.js', '.mjs', '.cjs', '.py', '.vbs', '.scr', '.jar', '.html', '.htm',
+      '.jsp', '.asp', '.aspx', '.cgi', '.pl', '.dll', '.com', '.msi',
+    ];
+
+    for (const ext of DANGEROUS_EXTENSIONS) {
+      if (lowerName.endsWith(ext)) {
+        throw new BadRequestException(`Executable or script file type "${ext}" is prohibited.`);
+      }
+    }
+
+    // 2. SVG inspection for stored XSS vectors
+    if (file.mimetype === 'image/svg+xml' || lowerName.endsWith('.svg')) {
+      const content = file.buffer.toString('utf8').toLowerCase();
+      const dangerousPatterns = [
+        '<script', 'javascript:', 'onload=', 'onerror=', 'onclick=', '<iframe', 'xlink:href="javascript:',
+      ];
+      for (const pattern of dangerousPatterns) {
+        if (content.includes(pattern)) {
+          throw new BadRequestException('SVG image contains embedded scripts and was rejected for security.');
+        }
+      }
+    }
+
+    // 3. Magic bytes / file signatures validation
+    if (file.buffer && file.buffer.length >= 4) {
+      if (file.mimetype === 'application/pdf') {
+        const isPdf =
+          file.buffer[0] === 0x25 &&
+          file.buffer[1] === 0x50 &&
+          file.buffer[2] === 0x44 &&
+          file.buffer[3] === 0x46; // %PDF
+        if (!isPdf) {
+          throw new BadRequestException('File content does not match standard PDF document structure.');
+        }
+      } else if (file.mimetype === 'image/jpeg') {
+        const isJpg = file.buffer[0] === 0xff && file.buffer[1] === 0xd8 && file.buffer[2] === 0xff;
+        if (!isJpg) {
+          throw new BadRequestException('File content does not match standard JPEG image format.');
+        }
+      } else if (file.mimetype === 'image/png') {
+        const isPng =
+          file.buffer[0] === 0x89 &&
+          file.buffer[1] === 0x50 &&
+          file.buffer[2] === 0x4e &&
+          file.buffer[3] === 0x47;
+        if (!isPng) {
+          throw new BadRequestException('File content does not match standard PNG image format.');
+        }
+      } else if (file.mimetype === 'image/webp') {
+        const isRiff =
+          file.buffer[0] === 0x52 &&
+          file.buffer[1] === 0x49 &&
+          file.buffer[2] === 0x46 &&
+          file.buffer[3] === 0x46; // RIFF
+        if (!isRiff) {
+          throw new BadRequestException('File content does not match standard WebP image format.');
+        }
+      }
+    }
+
+    return cleanName;
   }
 
   /**

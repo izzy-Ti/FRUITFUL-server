@@ -122,13 +122,27 @@ export class StorageController {
   }
 
   /**
-   * Retrieve metadata for a specific uploaded file.
+   * Retrieve metadata for a specific uploaded file (enforces authorization).
    */
   @Get('files/:id')
-  async getFileMetadata(@Param('id') id: string) {
-    const file = await this.storageService.getFileMetadata(id);
+  async getFileMetadata(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+  ) {
+    const file = await this.storageService.getFileMetadata(id, user);
     return {
       file,
     };
+  }
+
+  /**
+   * Request authorized access URL for a protected file.
+   */
+  @Get('files/:id/access')
+  async getFileAccess(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+  ) {
+    return this.storageService.getFileAccess(id, user);
   }
 }

@@ -16,7 +16,11 @@ import { AdminModule } from './admin/admin.module.js';
 import { CategoriesModule } from './categories/categories.module.js';
 import { ControlledDataModule } from './controlled-data/controlled-data.module.js';
 import { NotificationsModule } from './notifications/notifications.module.js';
-import { LoggerMiddleware } from './common/index.js';
+import {
+  LoggerMiddleware,
+  SecurityHeadersMiddleware,
+  RateLimiterMiddleware,
+} from './common/index.js';
 
 export const { ObserveModule, ObserveInstrument } = createObserveModule();
 
@@ -54,6 +58,8 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
-    consumer.apply(LoggerMiddleware).forRoutes('*');
+    consumer
+      .apply(SecurityHeadersMiddleware, RateLimiterMiddleware, LoggerMiddleware)
+      .forRoutes('*');
   }
 }

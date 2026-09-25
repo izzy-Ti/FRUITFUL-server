@@ -11,6 +11,8 @@ describe('StorageController', () => {
 
   const mockStorageService = {
     uploadBuffer: vi.fn(),
+    getFileMetadata: vi.fn(),
+    getFileAccess: vi.fn(),
   };
 
   const mockAuthService = {
@@ -82,6 +84,22 @@ describe('StorageController', () => {
 
       expect(res.message).toBe('Image uploaded successfully.');
       expect(res.url).toBe(mockResult.url);
+    });
+  });
+
+  describe('protected file metadata and access', () => {
+    it('should get file metadata for authorized user', async () => {
+      mockStorageService.getFileMetadata.mockResolvedValue({ id: 'f-1', fileName: 'resume.pdf' });
+      const res = await controller.getFileMetadata(mockUser, 'f-1');
+      expect(res.file.id).toBe('f-1');
+      expect(mockStorageService.getFileMetadata).toHaveBeenCalledWith('f-1', mockUser);
+    });
+
+    it('should get file access url for authorized user', async () => {
+      mockStorageService.getFileAccess.mockResolvedValue({ authorized: true, downloadUrl: 'https://cloudinary.com/cv.pdf' });
+      const res = await controller.getFileAccess(mockUser, 'f-1');
+      expect(res.authorized).toBe(true);
+      expect(mockStorageService.getFileAccess).toHaveBeenCalledWith('f-1', mockUser);
     });
   });
 });

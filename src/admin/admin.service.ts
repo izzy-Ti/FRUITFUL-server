@@ -1282,7 +1282,15 @@ export class AdminService {
   }
 
   async createCategory(dto: any) {
-    return this.categoriesService.create(dto);
+    const res = await this.categoriesService.create(dto);
+    await this.createAuditRecord({
+      adminId: 'admin',
+      action: 'CATEGORY_CREATE',
+      targetEntity: 'Category',
+      targetId: res.id,
+      details: { name: res.name },
+    });
+    return res;
   }
 
   async updateCategory(id: string, dto: any) {
@@ -1290,7 +1298,14 @@ export class AdminService {
   }
 
   async deleteCategory(id: string) {
-    return this.categoriesService.delete(id);
+    const res = await this.categoriesService.delete(id);
+    await this.createAuditRecord({
+      adminId: 'admin',
+      action: 'CATEGORY_DELETE',
+      targetEntity: 'Category',
+      targetId: id,
+    });
+    return res;
   }
 
   async seedCategories() {
@@ -1302,7 +1317,15 @@ export class AdminService {
   }
 
   async createSkill(dto: any) {
-    return this.skillsService.create(dto);
+    const res = await this.skillsService.create(dto);
+    await this.createAuditRecord({
+      adminId: 'admin',
+      action: 'SKILL_CREATE',
+      targetEntity: 'Skill',
+      targetId: res.id,
+      details: { name: res.name },
+    });
+    return res;
   }
 
   async updateSkill(id: string, dto: any) {
@@ -1310,7 +1333,14 @@ export class AdminService {
   }
 
   async deleteSkill(id: string) {
-    return this.skillsService.delete(id);
+    const res = await this.skillsService.delete(id);
+    await this.createAuditRecord({
+      adminId: 'admin',
+      action: 'SKILL_DELETE',
+      targetEntity: 'Skill',
+      targetId: id,
+    });
+    return res;
   }
 
   async seedSkills() {
@@ -1322,7 +1352,15 @@ export class AdminService {
   }
 
   async createControlledData(dto: any) {
-    return this.controlledDataService.create(dto);
+    const res = await this.controlledDataService.create(dto);
+    await this.createAuditRecord({
+      adminId: 'admin',
+      action: 'CONTROLLED_DATA_CREATE',
+      targetEntity: 'ControlledData',
+      targetId: res.id,
+      details: { category: res.category, key: res.key },
+    });
+    return res;
   }
 
   async updateControlledData(id: string, dto: any) {
@@ -1330,7 +1368,14 @@ export class AdminService {
   }
 
   async deleteControlledData(id: string, force = false) {
-    return this.controlledDataService.delete(id, force);
+    const res = await this.controlledDataService.delete(id, force);
+    await this.createAuditRecord({
+      adminId: 'admin',
+      action: 'CONTROLLED_DATA_DELETE',
+      targetEntity: 'ControlledData',
+      targetId: id,
+    });
+    return res;
   }
 
   async seedControlledData() {
