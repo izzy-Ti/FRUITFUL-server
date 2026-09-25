@@ -63,6 +63,16 @@ export class QueryTalentDto {
   @IsOptional()
   sortBy?: TalentSortBy;
 
+  @IsString()
+  @IsOptional()
+  minSkillLevel?: string;
+
+  @IsNumber()
+  @Min(0)
+  @IsOptional()
+  @Type(() => Number)
+  minMatchScore?: number;
+
   @IsNumber()
   @Min(1)
   @IsOptional()

@@ -4,10 +4,13 @@ import {
   ForbiddenException,
   BadRequestException,
   Logger,
+  Optional,
 } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../database/prisma.service.js';
 import { SkillsService } from '../skills/skills.service.js';
+import { SearchService } from '../search/index.js';
 import { Role } from '../common/enums/role.enum.js';
 import {
   UpsertProfileDto,
@@ -52,6 +55,8 @@ export interface FullJobSeekerProfile {
   experience: any[];
   skills: any[];
   portfolioProjects: any[];
+  relevanceScore?: number;
+  searchScoreBreakdown?: any;
   createdAt: string;
   updatedAt: string;
 }
@@ -87,10 +92,15 @@ function calculateTotalExperienceYears(experienceRecords: any[], skills: any[]):
 export class JobSeekersService {
   private readonly logger = new Logger(JobSeekersService.name);
 
+  private readonly searchService: SearchService;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly skillsService: SkillsService,
-  ) {}
+    @Optional() searchService?: SearchService,
+  ) {
+    this.searchService = searchService || new SearchService(new ConfigService());
+  }
 
   /**
    * Internal helper to find or create a profile for a given user.
@@ -306,6 +316,8 @@ export class JobSeekersService {
   async searchTalent(query?: {
     search?: string;
     skills?: string;
+    minSkillLevel?: string;
+    minMatchScore?: number;
     location?: string;
     education?: string;
     institution?: string;
@@ -446,6 +458,24 @@ export class JobSeekersService {
       });
     }
 
+    // Advanced Multi-Dimensional Weighted Skill & Profile Scoring
+    for (const profile of filtered) {
+      const breakdown = this.searchService.scoreTalentProfile(profile, {
+        search: query?.search,
+        skills: query?.skills,
+        minSkillLevel: query?.minSkillLevel,
+        minExperienceYears: query?.minExperienceYears,
+      });
+
+      profile.relevanceScore = breakdown.compositeScore;
+      profile.searchScoreBreakdown = breakdown;
+    }
+
+    // Filter by minMatchScore threshold if specified
+    if (query?.minMatchScore !== undefined && query.minMatchScore > 0) {
+      filtered = filtered.filter((p) => (p.relevanceScore || 0) >= query.minMatchScore!);
+    }
+
     // Sorting
     const sortBy = query?.sortBy || TalentSortBy.RELEVANCE;
 
@@ -462,33 +492,13 @@ export class JobSeekersService {
         return nameA.localeCompare(nameB);
       });
     } else {
-      // TalentSortBy.RELEVANCE: Score matching based on relevance
-      const scoreProfile = (p: FullJobSeekerProfile): number => {
-        let score = 0;
-        if (query?.search) {
-          const s = query.search.trim().toLowerCase();
-          if (p.headline?.toLowerCase().includes(s)) score += 20;
-          if (p.user?.name?.toLowerCase().includes(s)) score += 15;
-          if (p.bio?.toLowerCase().includes(s)) score += 10;
-          if ((p.skills || []).some((sk) => sk.name?.toLowerCase().includes(s))) score += 15;
+      // TalentSortBy.RELEVANCE: Sort descending by composite score, breaking ties by experience
+      filtered.sort((a, b) => {
+        if ((b.relevanceScore || 0) !== (a.relevanceScore || 0)) {
+          return (b.relevanceScore || 0) - (a.relevanceScore || 0);
         }
-        if (query?.skills) {
-          const sTerms = query.skills.split(',').map((x) => x.trim().toLowerCase()).filter(Boolean);
-          const matchedSkills = (p.skills || []).filter((sk) =>
-            sTerms.some(
-              (st) =>
-                sk.name?.toLowerCase().includes(st) ||
-                sk.category?.toLowerCase().includes(st),
-            ),
-          );
-          score += matchedSkills.length * 15;
-        }
-        if (p.isAvailable) score += 5;
-        score += Math.min(p.totalExperienceYears, 10);
-        return score;
-      };
-
-      filtered.sort((a, b) => scoreProfile(b) - scoreProfile(a));
+        return b.totalExperienceYears - a.totalExperienceYears;
+      });
     }
 
     // Pagination

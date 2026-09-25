@@ -4,9 +4,12 @@ import {
   BadRequestException,
   ForbiddenException,
   Logger,
+  Optional,
 } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../database/prisma.service.js';
+import { SearchService } from '../search/index.js';
 import { CreateJobDto, UpdateJobDto, QueryJobsDto } from './dto/index.js';
 import type { AuthUser } from '../auth/auth.service.js';
 
@@ -54,7 +57,14 @@ export interface FullJob {
 export class JobsService {
   private readonly logger = new Logger(JobsService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly searchService: SearchService;
+
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() searchService?: SearchService,
+  ) {
+    this.searchService = searchService || new SearchService(new ConfigService());
+  }
 
   /**
    * Helper to assemble a job with linked employer organization details.
@@ -607,28 +617,40 @@ export class JobsService {
       .orderBy((j) => j.createdAt.desc())
       .all();
 
-    // Context-aware Upwork-style profile relevance ranking
+    // Full-Text Search and Candidate Profile Relevance Ranking
     let candidateContext = null;
     if (currentUser?.id && (currentUser.role === 'job_seeker' || !currentUser.role)) {
       candidateContext = await this.getCandidateProfileContext(currentUser.id);
     }
 
-    let rankedJobs: { job: any; relevanceScore?: number }[] = allMatching.map((job) => ({ job }));
-    if (candidateContext) {
-      const scoredJobs = allMatching.map((job) => ({
-        job,
-        relevanceScore: this.calculateJobRelevanceScore(job, candidateContext!),
-      }));
+    let rankedJobs: { job: any; relevanceScore?: number }[] = allMatching.map((job) => {
+      let relevanceScore: number | undefined;
 
-      // Sort descending by relevance score (highest relevance at top, least related at bottom)
-      scoredJobs.sort((a, b) => {
-        if (b.relevanceScore !== a.relevanceScore) {
-          return b.relevanceScore - a.relevanceScore;
+      const ftsScore = query.search ? this.searchService.scoreJobFts(job, query.search) : 0;
+
+      if (candidateContext) {
+        const candidateScore = this.calculateJobRelevanceScore(job, candidateContext);
+        if (query.search) {
+          relevanceScore = Math.round(0.5 * candidateScore + 0.5 * ftsScore);
+        } else {
+          relevanceScore = candidateScore;
+        }
+      } else if (query.search) {
+        relevanceScore = ftsScore;
+      }
+
+      return { job, relevanceScore };
+    });
+
+    if (candidateContext || query.search) {
+      rankedJobs.sort((a, b) => {
+        const scoreA = a.relevanceScore ?? 0;
+        const scoreB = b.relevanceScore ?? 0;
+        if (scoreB !== scoreA) {
+          return scoreB - scoreA;
         }
         return new Date(b.job.createdAt).getTime() - new Date(a.job.createdAt).getTime();
       });
-
-      rankedJobs = scoredJobs;
     }
 
     const page = query.page && query.page > 0 ? query.page : 1;
