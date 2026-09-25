@@ -12,6 +12,11 @@ import {
   type EmployerVerificationNotificationPayload,
   type AdminModerationAlertPayload,
   type NotificationRecord,
+  type InterviewNotificationPayload,
+  type InterviewCancellationPayload,
+  type JobOfferNotificationPayload,
+  type OfferStatusChangeNotificationPayload,
+  type CandidateRejectionNotificationPayload,
 } from './notifications.types.js';
 
 @Injectable()
@@ -392,7 +397,68 @@ export class NotificationsService {
   }
 
   // ==========================================
+  // 7. NEW MESSAGE NOTIFICATION
+  // ==========================================
+
+  async sendNewMessageNotification(payload: {
+    recipientUserId: string;
+    recipientEmail?: string | null;
+    recipientName?: string;
+    senderUserId: string;
+    senderName: string;
+    conversationId: string;
+    messagePreview: string;
+    sendEmail?: boolean;
+  }) {
+    let emailSent = false;
+    let emailDeliveryStatus = 'skipped';
+
+    if (payload.sendEmail !== false && payload.recipientEmail) {
+      try {
+        const template = EmailTemplates.newMessageNotification({
+          recipientName: payload.recipientName,
+          senderName: payload.senderName,
+          messagePreview: payload.messagePreview,
+        });
+
+        const emailResult = await this.emailService.sendEmail({
+          to: payload.recipientEmail,
+          subject: template.subject,
+          html: template.html,
+          text: template.text,
+        });
+
+        emailSent = emailResult.success;
+        emailDeliveryStatus = emailResult.success ? 'sent' : 'failed';
+      } catch (err) {
+        this.logger.warn(`Failed to send new message email to ${payload.recipientEmail}: ${err}`);
+      }
+    }
+
+    const notification = await this.createNotification({
+      userId: payload.recipientUserId,
+      type: NotificationType.NEW_MESSAGE,
+      title: `New message from ${payload.senderName}`,
+      message: payload.messagePreview,
+      data: {
+        conversationId: payload.conversationId,
+        senderUserId: payload.senderUserId,
+        senderName: payload.senderName,
+      },
+      emailSent,
+      emailDeliveryStatus,
+    });
+
+    return {
+      success: true,
+      emailSent,
+      notification,
+    };
+  }
+
+  // ==========================================
   // USER NOTIFICATION INBOX OPERATIONS
+  // ==========================================
   // ==========================================
 
   /**
@@ -524,6 +590,293 @@ export class NotificationsService {
       .delete();
 
     return { success: true };
+  }
+
+  // ==========================================
+  // 6. INTERVIEW NOTIFICATIONS & REMINDERS
+  // ==========================================
+
+  async sendInterviewNotification(payload: InterviewNotificationPayload) {
+    const template = EmailTemplates.interviewInvitationOrReminder({
+      candidateName: payload.candidateName,
+      employerName: payload.employerName,
+      jobTitle: payload.jobTitle,
+      interviewTitle: payload.interviewTitle,
+      interviewType: payload.interviewType,
+      startTime: payload.startTime,
+      endTime: payload.endTime,
+      timezone: payload.timezone,
+      candidateTimezone: payload.candidateTimezone,
+      meetingLink: payload.meetingLink,
+      location: payload.location,
+      candidateInstructions: payload.candidateInstructions,
+      interviewId: payload.interviewId,
+      isReminder: payload.isReminder,
+      reminderType: payload.reminderType,
+      isRescheduled: payload.isRescheduled,
+      previousStartTime: payload.previousStartTime,
+    });
+
+    const attachments = payload.icsAttachment
+      ? [
+          {
+            filename: payload.icsAttachment.filename || 'invite.ics',
+            content: payload.icsAttachment.content,
+            contentType: 'text/calendar; charset=utf-8; method=REQUEST',
+          },
+        ]
+      : undefined;
+
+    let emailResult = null;
+    if (payload.candidateEmail) {
+      emailResult = await this.emailService.sendEmail({
+        to: payload.candidateEmail,
+        subject: template.subject,
+        html: template.html,
+        text: template.text,
+        attachments,
+      });
+    }
+
+    // Also dispatch calendar invite to assigned interviewers
+    if (payload.interviewerEmails && payload.interviewerEmails.length > 0) {
+      for (const interviewerEmail of payload.interviewerEmails) {
+        if (interviewerEmail && interviewerEmail !== payload.candidateEmail) {
+          try {
+            await this.emailService.sendEmail({
+              to: interviewerEmail,
+              subject: `[Interviewer Notice] ${template.subject}`,
+              html: template.html,
+              text: template.text,
+              attachments,
+            });
+          } catch (err) {
+            this.logger.warn(`Failed to dispatch interview email to interviewer ${interviewerEmail}: ${err}`);
+          }
+        }
+      }
+    }
+
+    const type = payload.isReminder
+      ? NotificationType.INTERVIEW_REMINDER
+      : NotificationType.INTERVIEW_SCHEDULED;
+
+    const notifTitle = payload.isReminder
+      ? `Interview Reminder: ${payload.interviewTitle} (${payload.jobTitle})`
+      : payload.isRescheduled
+      ? `Interview Rescheduled: ${payload.interviewTitle} (${payload.jobTitle})`
+      : `Interview Scheduled: ${payload.interviewTitle} (${payload.jobTitle})`;
+
+    const notifMsg = payload.isReminder
+      ? `Upcoming interview with ${payload.employerName} starting at ${new Date(payload.startTime).toLocaleTimeString()}`
+      : payload.isRescheduled
+      ? `${payload.employerName} has rescheduled your interview for ${payload.jobTitle}.`
+      : `${payload.employerName} has scheduled an interview for ${payload.jobTitle}.`;
+
+    return this.createNotification({
+      userId: payload.candidateUserId,
+      type,
+      title: notifTitle,
+      message: notifMsg,
+      data: {
+        interviewId: payload.interviewId,
+        meetingLink: payload.meetingLink,
+        startTime: payload.startTime,
+        endTime: payload.endTime,
+        isRescheduled: payload.isRescheduled,
+      },
+      emailSent: emailResult ? emailResult.success : false,
+      emailDeliveryStatus: emailResult
+        ? emailResult.success
+          ? 'delivered'
+          : 'failed'
+        : 'skipped',
+    });
+  }
+
+  async sendInterviewRescheduledNotification(payload: InterviewNotificationPayload) {
+    return this.sendInterviewNotification({
+      ...payload,
+      isRescheduled: true,
+    });
+  }
+
+  async sendInterviewCancellationNotification(payload: InterviewCancellationPayload) {
+    const template = EmailTemplates.interviewCancelled({
+      candidateName: payload.candidateName,
+      employerName: payload.employerName,
+      jobTitle: payload.jobTitle,
+      interviewTitle: payload.interviewTitle,
+      startTime: payload.startTime,
+      cancellationReason: payload.cancellationReason,
+    });
+
+    const attachments = payload.icsAttachment
+      ? [
+          {
+            filename: payload.icsAttachment.filename || 'cancel.ics',
+            content: payload.icsAttachment.content,
+            contentType: 'text/calendar; charset=utf-8; method=CANCEL',
+          },
+        ]
+      : undefined;
+
+    let emailResult = null;
+    if (payload.candidateEmail) {
+      emailResult = await this.emailService.sendEmail({
+        to: payload.candidateEmail,
+        subject: template.subject,
+        html: template.html,
+        text: template.text,
+        attachments,
+      });
+    }
+
+    // Also dispatch cancellation notice to assigned interviewers
+    if (payload.interviewerEmails && payload.interviewerEmails.length > 0) {
+      for (const interviewerEmail of payload.interviewerEmails) {
+        if (interviewerEmail && interviewerEmail !== payload.candidateEmail) {
+          try {
+            await this.emailService.sendEmail({
+              to: interviewerEmail,
+              subject: `[Interviewer Notice] ${template.subject}`,
+              html: template.html,
+              text: template.text,
+              attachments,
+            });
+          } catch (err) {
+            this.logger.warn(`Failed to dispatch interview cancellation email to interviewer ${interviewerEmail}: ${err}`);
+          }
+        }
+      }
+    }
+
+    return this.createNotification({
+      userId: payload.candidateUserId,
+      type: NotificationType.INTERVIEW_CANCELLED,
+      title: `Interview Cancelled: ${payload.interviewTitle}`,
+      message: `Your scheduled interview with ${payload.employerName} for ${payload.jobTitle} was cancelled.`,
+      data: {
+        jobTitle: payload.jobTitle,
+        reason: payload.cancellationReason,
+      },
+      emailSent: emailResult ? emailResult.success : false,
+      emailDeliveryStatus: emailResult
+        ? emailResult.success
+          ? 'delivered'
+          : 'failed'
+        : 'skipped',
+    });
+  }
+
+  // ==========================================
+  // 7. JOB OFFER NOTIFICATIONS
+  // ==========================================
+
+  async sendJobOfferNotification(payload: JobOfferNotificationPayload) {
+    const template = EmailTemplates.jobOffer({
+      candidateName: payload.candidateName,
+      employerName: payload.employerName,
+      jobTitle: payload.jobTitle,
+      salary: payload.salary,
+      currency: payload.currency,
+      salaryPeriod: payload.salaryPeriod,
+      startDate: payload.startDate,
+      expiryDate: payload.expiryDate,
+      benefits: payload.benefits,
+    });
+
+    let emailResult = null;
+    if (payload.candidateEmail) {
+      emailResult = await this.emailService.sendEmail({
+        to: payload.candidateEmail,
+        subject: template.subject,
+        html: template.html,
+        text: template.text,
+      });
+    }
+
+    return this.createNotification({
+      userId: payload.candidateUserId,
+      type: NotificationType.OFFER_RECEIVED,
+      title: `Job Offer: ${payload.jobTitle} at ${payload.employerName}`,
+      message: `Congratulations! ${payload.employerName} has extended an official offer of ${payload.currency} ${payload.salary.toLocaleString()}/${payload.salaryPeriod}.`,
+      data: {
+        offerId: payload.offerId,
+        salary: payload.salary,
+        currency: payload.currency,
+        startDate: payload.startDate,
+      },
+      emailSent: emailResult ? emailResult.success : false,
+      emailDeliveryStatus: emailResult
+        ? emailResult.success
+          ? 'delivered'
+          : 'failed'
+        : 'skipped',
+    });
+  }
+
+  async sendOfferStatusNotification(payload: OfferStatusChangeNotificationPayload) {
+    const title = payload.status === 'accepted'
+      ? `Candidate Accepted Offer: ${payload.candidateName} (${payload.jobTitle})`
+      : `Candidate Declined Offer: ${payload.candidateName} (${payload.jobTitle})`;
+
+    const message = payload.status === 'accepted'
+      ? `${payload.candidateName} has formally accepted the job offer for ${payload.jobTitle}!`
+      : `${payload.candidateName} has declined the offer. Reason/Feedback: "${payload.candidateFeedback || 'None provided'}"`;
+
+    return this.createNotification({
+      userId: payload.employerUserId,
+      type: NotificationType.OFFER_STATUS_CHANGE,
+      title,
+      message,
+      data: {
+        offerId: payload.offerId,
+        status: payload.status,
+        candidateFeedback: payload.candidateFeedback,
+      },
+    });
+  }
+
+  // ==========================================
+  // 8. CANDIDATE REJECTION NOTIFICATIONS
+  // ==========================================
+
+  async sendCandidateRejectionNotification(payload: CandidateRejectionNotificationPayload) {
+    const template = EmailTemplates.candidateRejection({
+      candidateName: payload.candidateName,
+      employerName: payload.employerName,
+      jobTitle: payload.jobTitle,
+      rejectionReasonLabel: payload.rejectionReasonLabel,
+      rejectionFeedback: payload.rejectionFeedback,
+    });
+
+    let emailResult = null;
+    if (payload.candidateEmail) {
+      emailResult = await this.emailService.sendEmail({
+        to: payload.candidateEmail,
+        subject: template.subject,
+        html: template.html,
+        text: template.text,
+      });
+    }
+
+    return this.createNotification({
+      userId: payload.candidateUserId,
+      type: NotificationType.CANDIDATE_REJECTED,
+      title: `Update on your application for ${payload.jobTitle}`,
+      message: `Your application with ${payload.employerName} for ${payload.jobTitle} has been updated.`,
+      data: {
+        applicationId: payload.applicationId,
+        feedback: payload.rejectionFeedback,
+      },
+      emailSent: emailResult ? emailResult.success : false,
+      emailDeliveryStatus: emailResult
+        ? emailResult.success
+          ? 'delivered'
+          : 'failed'
+        : 'skipped',
+    });
   }
 
   // ==========================================

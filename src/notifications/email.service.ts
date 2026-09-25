@@ -21,7 +21,9 @@ export class EmailService {
       // In production or development environment:
       // Fruitful Journey dispatches emails using standard SMTP/Neon Mailer.
       // Here we handle structured logging and record keeping.
-      this.logger.log(`[EMAIL DISPATCH] To: ${options.to} | Subject: "${options.subject}" | MessageId: ${messageId}`);
+      const attachmentsCount = options.attachments?.length || 0;
+      const attachInfo = attachmentsCount > 0 ? ` | Attachments: ${attachmentsCount}` : '';
+      this.logger.log(`[EMAIL DISPATCH] To: ${options.to} | Subject: "${options.subject}"${attachInfo} | MessageId: ${messageId}`);
 
       const result: EmailDeliveryResult = {
         success: true,
@@ -30,6 +32,7 @@ export class EmailService {
         subject: options.subject,
         timestamp,
         simulated: true,
+        attachmentsCount,
       };
 
       // Store in history (keep last 100 for inspection / debugging)

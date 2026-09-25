@@ -279,10 +279,11 @@ export class StorageService {
       return true;
     }
 
-    // 3. Public assets (avatars, logos, portfolio screenshots)
-    if (file.entityType === 'image' || file.entityType === 'general') {
+    // 3. Public assets (avatars, logos, portfolio screenshots, message attachments)
+    if (file.entityType === 'image' || file.entityType === 'general' || file.entityType === 'message_attachment') {
       return true;
     }
+
 
     // 4. Protected CV document: only candidate or employer with an application from candidate
     if (file.entityType === 'cv') {

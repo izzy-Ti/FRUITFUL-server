@@ -30,6 +30,27 @@ describe('EmailService', () => {
     expect(history[0].messageId).toBe(result.messageId);
   });
 
+  it('should dispatch an email with calendar invite attachments', async () => {
+    const result = await service.sendEmail({
+      to: 'candidate@example.com',
+      subject: 'Interview Invitation',
+      html: '<p>You have an interview</p>',
+      text: 'You have an interview',
+      attachments: [
+        {
+          filename: 'invite.ics',
+          content: 'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nEND:VCALENDAR',
+          contentType: 'text/calendar; charset=utf-8; method=REQUEST',
+        },
+      ],
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.attachmentsCount).toBe(1);
+    const history = service.getSentEmails();
+    expect(history[0].attachmentsCount).toBe(1);
+  });
+
   it('should clear history when requested', async () => {
     await service.sendEmail({
       to: 'user@example.com',

@@ -23,6 +23,8 @@ model JobSeekerProfile {
   photoUrl    String?
   bio         String?
   location    String?
+  latitude    Float?
+  longitude   Float?
   phone       String?
   cvUrl       String?
   languages   String[]
@@ -184,6 +186,8 @@ model Job {
   employmentType   String   @default("full_time")
   workplaceType    String   @default("on_site")
   location         String?
+  latitude         Float?
+  longitude        Float?
   salaryMin        Int?
   salaryMax        Int?
   salaryCurrency   String?  @default("USD")
@@ -211,17 +215,28 @@ model JobApplication {
   profileId      String
   profile        JobSeekerProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
   status         String   @default("submitted")
-  coverLetter    String?
-  cvUrl          String?
-  portfolioLinks String[]
-  employerNotes  String?
-  appliedAt      TimestamptzString @default(now())
-  updatedAt      temporal.updatedAtString()
+  stageId        String?
+  stage          PipelineStage? @relation(fields: [stageId], references: [id], onDelete: SetNull)
+  rating         Int?
+  stageMovedAt   TimestamptzString?
+  tags           String[] @default([])
+  coverLetter         String?
+  cvUrl               String?
+  portfolioLinks      String[]
+  employerNotes       String?
+  rejectionReasonCode String?
+  rejectionCategory   String?
+  rejectionFeedback   String?
+  rejectedAt          TimestamptzString?
+  appliedAt           TimestamptzString @default(now())
+  updatedAt           temporal.updatedAtString()
 
   @@unique([jobId, profileId])
   @@index([jobId])
   @@index([profileId])
   @@index([status])
+  @@index([stageId])
+  @@index([rejectionReasonCode])
 }
 
 model ApplicationStatusHistory {
@@ -308,5 +323,358 @@ model Notification {
   @@index([userId, read])
   @@index([type])
   @@index([createdAt])
+}
+
+model SavedSearch {
+  id             String   @id
+  userId         String
+  title          String
+  type           String
+  filters        String
+  alertFrequency String   @default("daily")
+  isActive       Boolean  @default(true)
+  lastNotifiedAt TimestamptzString?
+  createdAt      TimestamptzString @default(now())
+  updatedAt      temporal.updatedAtString()
+
+  @@index([userId])
+  @@index([type])
+  @@index([alertFrequency])
+  @@index([isActive])
+}
+
+model SavedCandidate {
+  id         String   @id
+  employerId String
+  employer   EmployerProfile  @relation(fields: [employerId], references: [id], onDelete: Cascade)
+  profileId  String
+  profile    JobSeekerProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  notes      String?
+  tags       String[]
+  createdAt  TimestamptzString @default(now())
+
+  @@unique([employerId, profileId])
+  @@index([employerId])
+  @@index([profileId])
+}
+
+model Conversation {
+  id            String   @id
+  employerId    String
+  employer      EmployerProfile  @relation(fields: [employerId], references: [id], onDelete: Cascade)
+  jobSeekerId   String
+  jobSeeker     JobSeekerProfile @relation(fields: [jobSeekerId], references: [id], onDelete: Cascade)
+  jobId         String?
+  job           Job?             @relation(fields: [jobId], references: [id], onDelete: SetNull)
+  status        String   @default("active")
+  lastMessageAt TimestamptzString?
+  createdAt     TimestamptzString @default(now())
+  updatedAt     temporal.updatedAtString()
+
+  @@unique([employerId, jobSeekerId])
+  @@index([employerId])
+  @@index([jobSeekerId])
+  @@index([status])
+  @@index([lastMessageAt])
+}
+
+model Message {
+  id             String   @id
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  senderId       String
+  sender         User         @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  content        String
+  isRead         Boolean  @default(false)
+  readAt         TimestamptzString?
+  isModerated    Boolean  @default(false)
+  createdAt      TimestamptzString @default(now())
+  updatedAt      temporal.updatedAtString()
+
+  @@index([conversationId])
+  @@index([senderId])
+  @@index([createdAt])
+  @@index([isRead])
+}
+
+model MessageAttachment {
+  id        String   @id
+  messageId String
+  message   Message       @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  fileId    String?
+  file      FileMetadata? @relation(fields: [fileId], references: [id], onDelete: SetNull)
+  url       String
+  fileName  String
+  fileSize  Int
+  mimeType  String
+  createdAt TimestamptzString @default(now())
+
+  @@index([messageId])
+}
+
+model MessageReport {
+  id           String   @id
+  messageId    String
+  message      Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  reporterId   String
+  reporter     User     @relation(fields: [reporterId], references: [id], onDelete: Cascade)
+  reason       String
+  details      String?
+  status       String   @default("pending")
+  reviewedById String?
+  reviewedBy   User?    @relation(fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewedAt   TimestamptzString?
+  adminNotes   String?
+  actionTaken  String?
+  createdAt    TimestamptzString @default(now())
+  updatedAt    temporal.updatedAtString()
+
+  @@index([messageId])
+  @@index([reporterId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model PipelineStage {
+  id          String   @id
+  employerId  String
+  employer    EmployerProfile @relation(fields: [employerId], references: [id], onDelete: Cascade)
+  jobId       String?
+  job         Job?            @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  name        String
+  slug        String
+  order       Int      @default(0)
+  color       String   @default("#3b82f6")
+  stageType   String   @default("interview")
+  description String?
+  isDefault   Boolean  @default(false)
+  isSystem    Boolean  @default(false)
+  createdAt   TimestamptzString @default(now())
+  updatedAt   temporal.updatedAtString()
+
+  @@index([employerId])
+  @@index([jobId])
+  @@index([order])
+}
+
+model CandidateNote {
+  id            String   @id
+  employerId    String
+  employer      EmployerProfile  @relation(fields: [employerId], references: [id], onDelete: Cascade)
+  profileId     String
+  profile       JobSeekerProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  applicationId String?
+  application   JobApplication?  @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  authorId      String
+  author        User             @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  content       String
+  category      String   @default("general")
+  rating        Int?
+  isPinned      Boolean  @default(false)
+  createdAt     TimestamptzString @default(now())
+  updatedAt     temporal.updatedAtString()
+
+  @@index([employerId])
+  @@index([profileId])
+  @@index([applicationId])
+  @@index([authorId])
+  @@index([createdAt])
+}
+
+model InternalComment {
+  id            String   @id
+  employerId    String
+  employer      EmployerProfile  @relation(fields: [employerId], references: [id], onDelete: Cascade)
+  applicationId String
+  application   JobApplication   @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  authorId      String
+  author        User             @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  parentId      String?
+  parent        InternalComment? @relation(fields: [parentId], references: [id], onDelete: Cascade)
+  content       String
+  mentions      String[] @default([])
+  createdAt     TimestamptzString @default(now())
+  updatedAt     temporal.updatedAtString()
+
+  @@index([applicationId])
+  @@index([employerId])
+  @@index([authorId])
+  @@index([parentId])
+  @@index([createdAt])
+}
+
+model JobInterview {
+  id                    String   @id
+  applicationId         String
+  application           JobApplication   @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  employerId            String
+  employer              EmployerProfile  @relation(fields: [employerId], references: [id], onDelete: Cascade)
+  candidateId           String
+  candidate             JobSeekerProfile @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  jobId                 String
+  job                   Job              @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  title                 String
+  interviewType         String   @default("video")
+  status                String   @default("scheduled")
+  startTime             TimestamptzString
+  endTime               TimestamptzString
+  timezone              String   @default("UTC")
+  meetingLink           String?
+  location              String?
+  interviewerIds        String[] @default([])
+  notes                 String?
+  candidateInstructions String?
+  rating                Int?
+  feedbackSummary       String?
+  cancellationReason    String?
+  reminderSent24h       Boolean  @default(false)
+  reminderSent1h        Boolean  @default(false)
+  reminderSent15m       Boolean  @default(false)
+  rescheduledCount      Int      @default(0)
+  rescheduledFrom       TimestamptzString?
+  rescheduledReason     String?
+  cancelledBy           String?
+  cancelledAt           TimestamptzString?
+  createdAt             TimestamptzString @default(now())
+  updatedAt             temporal.updatedAtString()
+
+  @@index([applicationId])
+  @@index([employerId])
+  @@index([candidateId])
+  @@index([jobId])
+  @@index([status])
+  @@index([startTime])
+}
+
+model JobOffer {
+  id                String   @id
+  applicationId     String
+  application       JobApplication   @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  employerId        String
+  employer          EmployerProfile  @relation(fields: [employerId], references: [id], onDelete: Cascade)
+  candidateId       String
+  candidate         JobSeekerProfile @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  jobId             String
+  job               Job              @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  status            String   @default("draft")
+  salary            Float
+  currency          String   @default("USD")
+  salaryPeriod      String   @default("yearly")
+  startDate         String
+  expiryDate        TimestamptzString?
+  benefits          String[] @default([])
+  offerLetterUrl    String?
+  notes             String?
+  candidateFeedback String?
+  sentAt            TimestamptzString?
+  respondedAt       TimestamptzString?
+  createdAt         TimestamptzString @default(now())
+  updatedAt         temporal.updatedAtString()
+
+  @@index([applicationId])
+  @@index([employerId])
+  @@index([candidateId])
+  @@index([jobId])
+  @@index([status])
+}
+
+model RejectionReason {
+  id                   String   @id
+  employerId           String?
+  employer             EmployerProfile? @relation(fields: [employerId], references: [id], onDelete: Cascade)
+  code                 String
+  label                String
+  category             String
+  description          String?
+  defaultEmailTemplate String?
+  isSystem             Boolean  @default(false)
+  isActive             Boolean  @default(true)
+  createdAt            TimestamptzString @default(now())
+  updatedAt            temporal.updatedAtString()
+
+  @@index([employerId])
+  @@index([code])
+  @@index([category])
+}
+
+model InterviewerAvailability {
+  id                  String   @id
+  employerId          String
+  employer            EmployerProfile @relation(fields: [employerId], references: [id], onDelete: Cascade)
+  userId              String?
+  timezone            String   @default("UTC")
+  weeklySchedule      String   @default("[]")
+  dateOverrides       String   @default("[]")
+  slotDurationMinutes Int      @default(45)
+  bufferMinutes       Int      @default(15)
+  minNoticeHours      Int      @default(24)
+  maxInterviewsPerDay Int      @default(6)
+  isActive            Boolean  @default(true)
+  createdAt           TimestamptzString @default(now())
+  updatedAt           temporal.updatedAtString()
+
+  @@index([employerId])
+  @@index([userId])
+}
+
+model CalendarEvent {
+  id                    String   @id
+  employerId            String
+  employer              EmployerProfile  @relation(fields: [employerId], references: [id], onDelete: Cascade)
+  interviewId           String?
+  interview             JobInterview?    @relation(fields: [interviewId], references: [id], onDelete: SetNull)
+  title                 String
+  description           String?
+  eventType             String   @default("interview")
+  startTime             TimestamptzString
+  endTime               TimestamptzString
+  timezone              String   @default("UTC")
+  location              String?
+  meetingUrl            String?
+  status                String   @default("confirmed")
+  attendees                String[] @default([])
+  organizerEmail           String?
+  sequence                 Int      @default(0)
+  googleCalendarEventId    String?
+  microsoftCalendarEventId String?
+  iCalUid                  String?
+  metadata                 String?
+  createdAt                TimestamptzString @default(now())
+  updatedAt                temporal.updatedAtString()
+
+  @@index([employerId])
+  @@index([interviewId])
+  @@index([startTime])
+  @@index([status])
+}
+
+model CalendarIntegration {
+  id               String   @id
+  employerId       String
+  employer         EmployerProfile @relation(fields: [employerId], references: [id], onDelete: Cascade)
+  userId           String?
+  provider         String
+  accountEmail     String?
+  calendarId       String?  @default("primary")
+  calendarName     String?
+  accessToken      String?
+  refreshToken     String?
+  expiresAt        TimestamptzString?
+  syncEnabled      Boolean  @default(true)
+  syncDirection    String   @default("bidirectional")
+  lastSyncedAt     TimestamptzString?
+  syncStatus       String   @default("connected")
+  syncError        String?
+  webhookId        String?
+  webhookSecret    String?
+  webhookExpiresAt TimestamptzString?
+  metadata         String?
+  createdAt        TimestamptzString @default(now())
+  updatedAt        temporal.updatedAtString()
+
+  @@unique([employerId, provider])
+  @@index([employerId])
+  @@index([provider])
+  @@index([syncStatus])
 }
 

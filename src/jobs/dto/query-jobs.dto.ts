@@ -1,5 +1,5 @@
-import { IsOptional, IsString, IsInt, Min, Max } from 'class-validator';
-import { Type } from 'class-transformer';
+import { IsOptional, IsString, IsInt, IsNumber, IsBoolean, Min, Max } from 'class-validator';
+import { Type, Transform } from 'class-transformer';
 
 export class QueryJobsDto {
   @IsString()
@@ -21,6 +21,32 @@ export class QueryJobsDto {
   @IsString()
   @IsOptional()
   location?: string;
+
+  @Type(() => Number)
+  @IsNumber()
+  @IsOptional()
+  latitude?: number;
+
+  @Type(() => Number)
+  @IsNumber()
+  @IsOptional()
+  longitude?: number;
+
+  @Type(() => Number)
+  @IsNumber()
+  @Min(1)
+  @Max(20000)
+  @IsOptional()
+  radiusKm?: number = 50;
+
+  @IsBoolean()
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (value === 'true' || value === true) return true;
+    if (value === 'false' || value === false) return false;
+    return undefined;
+  })
+  includeRemote?: boolean = true;
 
   @IsString()
   @IsOptional()

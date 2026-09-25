@@ -249,6 +249,112 @@ describe('NotificationsService', () => {
     });
   });
 
+  describe('7. Interview Email Invitations & Calendar Sync', () => {
+    it('should dispatch interview invitation with .ics attachment to candidate and interviewer', async () => {
+      const result = await service.sendInterviewNotification({
+        candidateUserId: 'user-1',
+        candidateEmail: 'candidate@example.com',
+        candidateName: 'Jane Doe',
+        employerName: 'Acme Corp',
+        jobTitle: 'Senior Fullstack Engineer',
+        interviewId: 'int-123',
+        interviewTitle: 'Technical Screening',
+        interviewType: 'video',
+        startTime: '2026-10-15T14:00:00.000Z',
+        endTime: '2026-10-15T15:00:00.000Z',
+        timezone: 'America/New_York',
+        candidateTimezone: 'Africa/Nairobi',
+        meetingLink: 'https://fruitful.daily.co/interview-123',
+        interviewerEmails: ['lead@acme.com'],
+        icsAttachment: {
+          filename: 'invite.ics',
+          content: 'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nEND:VCALENDAR',
+        },
+      });
+
+      expect(result).toBeDefined();
+      expect(mockEmailService.sendEmail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          to: 'candidate@example.com',
+          subject: expect.stringContaining('Interview Invitation'),
+          attachments: [
+            expect.objectContaining({
+              filename: 'invite.ics',
+              contentType: 'text/calendar; charset=utf-8; method=REQUEST',
+            }),
+          ],
+        }),
+      );
+      expect(mockEmailService.sendEmail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          to: 'lead@acme.com',
+          subject: expect.stringContaining('Interviewer Notice'),
+        }),
+      );
+    });
+
+    it('should dispatch rescheduled notification with updated time and attachment', async () => {
+      await service.sendInterviewRescheduledNotification({
+        candidateUserId: 'user-1',
+        candidateEmail: 'candidate@example.com',
+        candidateName: 'Jane Doe',
+        employerName: 'Acme Corp',
+        jobTitle: 'Senior Fullstack Engineer',
+        interviewId: 'int-123',
+        interviewTitle: 'Technical Screening',
+        interviewType: 'video',
+        startTime: '2026-10-16T14:00:00.000Z',
+        endTime: '2026-10-16T15:00:00.000Z',
+        timezone: 'America/New_York',
+        previousStartTime: '2026-10-15T14:00:00.000Z',
+      });
+
+      expect(mockEmailService.sendEmail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          to: 'candidate@example.com',
+          subject: expect.stringContaining('[Rescheduled]'),
+        }),
+      );
+    });
+
+    it('should dispatch cancellation notification with cancellation .ics attachment', async () => {
+      await service.sendInterviewCancellationNotification({
+        candidateUserId: 'user-1',
+        candidateEmail: 'candidate@example.com',
+        candidateName: 'Jane Doe',
+        employerName: 'Acme Corp',
+        jobTitle: 'Senior Fullstack Engineer',
+        interviewTitle: 'Technical Screening',
+        startTime: '2026-10-15T14:00:00.000Z',
+        cancellationReason: 'Position filled internally',
+        interviewerEmails: ['lead@acme.com'],
+        icsAttachment: {
+          filename: 'cancel.ics',
+          content: 'BEGIN:VCALENDAR\r\nMETHOD:CANCEL\r\nEND:VCALENDAR',
+        },
+      });
+
+      expect(mockEmailService.sendEmail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          to: 'candidate@example.com',
+          subject: expect.stringContaining('Cancelled: Interview'),
+          attachments: [
+            expect.objectContaining({
+              filename: 'cancel.ics',
+              contentType: 'text/calendar; charset=utf-8; method=CANCEL',
+            }),
+          ],
+        }),
+      );
+      expect(mockEmailService.sendEmail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          to: 'lead@acme.com',
+          subject: expect.stringContaining('Interviewer Notice'),
+        }),
+      );
+    });
+  });
+
   describe('Inbox Management', () => {
     it('should retrieve user notifications', async () => {
       const res = await service.getUserNotifications('user-1', { page: 1, limit: 10 });

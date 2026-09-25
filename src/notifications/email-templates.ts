@@ -405,4 +405,263 @@ export const EmailTemplates = {
       text,
     };
   },
+
+  newMessageNotification(data: {
+    recipientName?: string;
+    senderName: string;
+    messagePreview: string;
+    conversationUrl?: string;
+  }) {
+    const displayName = data.recipientName || 'there';
+    const html = baseLayout(
+      `New message from ${data.senderName}`,
+      `<h2>You have a new message</h2>
+       <p>Hi ${displayName},</p>
+       <p><strong>${data.senderName}</strong> sent you a message on Fruitful Journey:</p>
+       <div class="card" style="border-left: 4px solid #059669; font-style: italic;">
+         "${data.messagePreview}"
+       </div>
+       <p style="margin-top: 24px;">
+         <a href="${data.conversationUrl || 'https://fruitfuljourney.com/messages'}" class="btn">View & Reply</a>
+       </p>
+       <p style="color: #64748b; font-size: 13px;">You can reply to this message directly in the Fruitful Journey platform.</p>`,
+    );
+
+    const text = `Hi ${displayName},\n\nYou have a new message from ${data.senderName} on Fruitful Journey:\n\n"${data.messagePreview}"\n\nView and reply: ${data.conversationUrl || 'https://fruitfuljourney.com/messages'}`;
+
+    return {
+      subject: `New message from ${data.senderName} - Fruitful Journey`,
+      html,
+      text,
+    };
+  },
+
+  interviewInvitationOrReminder(data: {
+    candidateName: string;
+    employerName: string;
+    jobTitle: string;
+    interviewTitle: string;
+    interviewType: string;
+    startTime: string;
+    endTime: string;
+    timezone: string;
+    candidateTimezone?: string;
+    meetingLink?: string | null;
+    location?: string | null;
+    candidateInstructions?: string | null;
+    interviewId?: string;
+    isReminder?: boolean;
+    reminderType?: string;
+    isRescheduled?: boolean;
+    previousStartTime?: string;
+  }) {
+    let subjectPrefix = 'Interview Invitation: ';
+    if (data.isReminder) {
+      subjectPrefix = `[Reminder ${data.reminderType ? '(' + data.reminderType + ')' : ''}] `;
+    } else if (data.isRescheduled) {
+      subjectPrefix = '[Rescheduled] ';
+    }
+    const subject = `${subjectPrefix}${data.interviewTitle} for ${data.jobTitle} with ${data.employerName}`;
+
+    const candidateTz = data.candidateTimezone || data.timezone || 'UTC';
+    const employerTz = data.timezone || 'UTC';
+
+    const formatTz = (iso: string, tz: string) => {
+      try {
+        return new Date(iso).toLocaleString('en-US', {
+          weekday: 'long',
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+          timeZone: tz,
+        }) + ` (${tz})`;
+      } catch {
+        return new Date(iso).toUTCString();
+      }
+    };
+
+    const candidateFormatted = formatTz(data.startTime, candidateTz);
+    const employerFormatted = formatTz(data.startTime, employerTz);
+
+    const dualTimeHtml = candidateTz !== employerTz
+      ? `<p style="margin: 0 0 6px 0;"><strong>Time (Your Local):</strong> ${candidateFormatted}</p>
+         <p style="margin: 0 0 8px 0; color: #475569;"><strong>Time (Employer):</strong> ${employerFormatted}</p>`
+      : `<p style="margin: 0 0 8px 0;"><strong>Date & Time:</strong> ${candidateFormatted}</p>`;
+
+    const previousTimeHtml = data.isRescheduled && data.previousStartTime
+      ? `<div style="margin: 0 0 12px 0; padding: 8px 12px; background: #fffbeb; border-left: 3px solid #f59e0b; border-radius: 4px; font-size: 13px;">
+           <span style="color: #92400e;"><strong>Previous Schedule:</strong> ${formatTz(data.previousStartTime, candidateTz)}</span>
+         </div>`
+      : '';
+
+    const locationDetails = data.meetingLink
+      ? `<p style="margin: 0 0 8px 0;"><strong>Video Meeting Link:</strong> <a href="${data.meetingLink}" target="_blank" style="color: #059669; font-weight: 600; word-break: break-all;">${data.meetingLink}</a></p>`
+      : data.location
+      ? `<p style="margin: 0 0 8px 0;"><strong>Location:</strong> ${data.location}</p>`
+      : '';
+
+    const instructionsHtml = data.candidateInstructions
+      ? `<div style="margin-top: 16px; padding: 12px; background: #f1f5f9; border-radius: 8px;">
+          <strong>Preparation & Instructions:</strong>
+          <p style="margin: 6px 0 0 0;">${data.candidateInstructions}</p>
+         </div>`
+      : '';
+
+    const actionButtons = `
+      <div style="margin-top: 24px; display: flex; flex-wrap: wrap; gap: 12px;">
+        ${
+          data.meetingLink
+            ? `<a href="${data.meetingLink}" class="btn" style="background: #2563eb; color: #ffffff; padding: 10px 18px; text-decoration: none; border-radius: 6px; font-weight: 600; display: inline-block;">Join Video Call</a>`
+            : ''
+        }
+        ${
+          data.interviewId
+            ? `<a href="https://fruitfuljourney.com/interviews/${data.interviewId}/confirm" style="background: #059669; color: #ffffff; padding: 10px 18px; text-decoration: none; border-radius: 6px; font-weight: 600; display: inline-block;">Confirm Attendance</a>
+               <a href="https://fruitfuljourney.com/interviews/${data.interviewId}/reschedule" style="background: #64748b; color: #ffffff; padding: 10px 18px; text-decoration: none; border-radius: 6px; font-weight: 600; display: inline-block;">Request Reschedule</a>`
+            : ''
+        }
+      </div>`;
+
+    const html = baseLayout(
+      subject,
+      `<h2>${data.isReminder ? 'Upcoming Interview Reminder' : data.isRescheduled ? 'Interview Rescheduled' : 'Interview Scheduled!'}</h2>
+       <p>Hi ${data.candidateName},</p>
+       <p>Your interview with <strong>${data.employerName}</strong> for the position of <strong>${data.jobTitle}</strong> is ${data.isRescheduled ? 'updated to a new time' : 'confirmed'}.</p>
+       <div class="card" style="border-left: 4px solid #3b82f6;">
+         ${previousTimeHtml}
+         <p style="margin: 0 0 8px 0;"><strong>Stage:</strong> ${data.interviewTitle}</p>
+         <p style="margin: 0 0 8px 0;"><strong>Format:</strong> ${data.interviewType.toUpperCase()}</p>
+         ${dualTimeHtml}
+         ${locationDetails}
+         ${instructionsHtml}
+       </div>
+       ${actionButtons}
+       <p style="color: #64748b; font-size: 13px; margin-top: 24px;">An official calendar invite (.ics) is attached to this email. Opening it will automatically add or update this session in Apple Calendar, Google Calendar, Outlook, or Thunderbird.</p>`,
+    );
+
+    const text = `Hi ${data.candidateName},\n\nYour interview for ${data.jobTitle} at ${data.employerName} is scheduled:\nTitle: ${data.interviewTitle}\nYour Time: ${candidateFormatted}\nEmployer Time: ${employerFormatted}\nFormat: ${data.interviewType}\n${data.meetingLink ? 'Meeting Link: ' + data.meetingLink + '\n' : ''}${data.location ? 'Location: ' + data.location + '\n' : ''}\n\nGood luck!`;
+
+    return { subject, html, text };
+  },
+
+  interviewCancelled(data: {
+    candidateName: string;
+    employerName: string;
+    jobTitle: string;
+    interviewTitle: string;
+    startTime: string;
+    cancellationReason?: string | null;
+  }) {
+    const subject = `Cancelled: Interview for ${data.jobTitle} with ${data.employerName}`;
+    const dateFormatted = new Date(data.startTime).toLocaleString('en-US', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+
+    const html = baseLayout(
+      subject,
+      `<h2>Interview Cancelled</h2>
+       <p>Hi ${data.candidateName},</p>
+       <p>We are notifying you that the following interview has been cancelled by <strong>${data.employerName}</strong>:</p>
+       <div class="card" style="border-left: 4px solid #ef4444;">
+         <p style="margin: 0 0 8px 0;"><strong>Position:</strong> ${data.jobTitle}</p>
+         <p style="margin: 0 0 8px 0;"><strong>Interview:</strong> ${data.interviewTitle}</p>
+         <p style="margin: 0 0 8px 0;"><strong>Originally Scheduled:</strong> ${dateFormatted}</p>
+         ${
+           data.cancellationReason
+             ? `<p style="margin: 0;"><strong>Reason:</strong> ${data.cancellationReason}</p>`
+             : ''
+         }
+       </div>
+       <p style="color: #64748b; font-size: 13px; margin-top: 20px;">A cancellation update (.ics) is attached to remove this session from your calendar automatically.</p>`,
+    );
+
+    const text = `Hi ${data.candidateName},\n\nYour interview for ${data.jobTitle} with ${data.employerName} (${data.interviewTitle}) originally scheduled for ${dateFormatted} has been cancelled.\n${data.cancellationReason ? 'Reason: ' + data.cancellationReason + '\n' : ''}`;
+
+    return { subject, html, text };
+  },
+
+  jobOffer(data: {
+    candidateName: string;
+    employerName: string;
+    jobTitle: string;
+    salary: number;
+    currency: string;
+    salaryPeriod: string;
+    startDate: string;
+    expiryDate?: string | null;
+    benefits?: string[];
+  }) {
+    const subject = `Congratulations! Official Job Offer from ${data.employerName} for ${data.jobTitle}`;
+    const salaryFormatted = `${data.currency} ${Number(data.salary).toLocaleString()} / ${data.salaryPeriod}`;
+
+    const benefitsHtml =
+      data.benefits && data.benefits.length > 0
+        ? `<div style="margin-top: 12px;"><strong>Key Benefits:</strong><ul style="margin: 6px 0 0 16px; padding: 0;">${data.benefits
+            .map((b) => `<li>${b}</li>`)
+            .join('')}</ul></div>`
+        : '';
+
+    const html = baseLayout(
+      subject,
+      `<h2>You've Received an Offer! 🎉</h2>
+       <p>Dear ${data.candidateName},</p>
+       <p>Congratulations! <strong>${data.employerName}</strong> has extended an official job offer for the role of <strong>${data.jobTitle}</strong>.</p>
+       <div class="card" style="border-left: 4px solid #10b981; background: #f0fdf4;">
+         <p style="margin: 0 0 8px 0;"><strong>Position:</strong> ${data.jobTitle}</p>
+         <p style="margin: 0 0 8px 0;"><strong>Compensation:</strong> ${salaryFormatted}</p>
+         <p style="margin: 0 0 8px 0;"><strong>Anticipated Start Date:</strong> ${data.startDate}</p>
+         ${
+           data.expiryDate
+             ? `<p style="margin: 0 0 8px 0; color: #b45309;"><strong>Offer Expiration:</strong> ${new Date(
+                 data.expiryDate,
+               ).toLocaleDateString()}</p>`
+             : ''
+         }
+         ${benefitsHtml}
+       </div>
+       <p style="margin-top: 24px;">Please review the full offer terms and submit your response in Fruitful Journey.</p>`,
+    );
+
+    const text = `Congratulations ${data.candidateName}!\n\n${data.employerName} has extended a job offer for ${data.jobTitle}.\nCompensation: ${salaryFormatted}\nStart Date: ${data.startDate}\n${data.expiryDate ? 'Expires: ' + data.expiryDate + '\n' : ''}\nPlease review and respond via your Fruitful Journey portal.`;
+
+    return { subject, html, text };
+  },
+
+  candidateRejection(data: {
+    candidateName: string;
+    employerName: string;
+    jobTitle: string;
+    rejectionReasonLabel?: string | null;
+    rejectionFeedback?: string | null;
+  }) {
+    const subject = `Update regarding your application for ${data.jobTitle} at ${data.employerName}`;
+
+    const feedbackHtml = data.rejectionFeedback
+      ? `<div class="card" style="margin-top: 16px; font-style: italic; background: #f8fafc;">
+          ${data.rejectionFeedback}
+         </div>`
+      : `<p>Thank you for taking the time to apply and interview with our team. Although your qualifications are noteworthy, we have decided to proceed with other candidates whose experience more closely matches our specific requirements at this stage.</p>`;
+
+    const html = baseLayout(
+      subject,
+      `<h2>Application Status Update</h2>
+       <p>Dear ${data.candidateName},</p>
+       <p>Thank you for your interest in joining <strong>${data.employerName}</strong> as a <strong>${data.jobTitle}</strong>.</p>
+       ${feedbackHtml}
+       <p>We genuinely appreciate the time you invested in exploring opportunities with us and wish you continued success in your professional journey.</p>
+       <p style="color: #64748b; font-size: 13px;">Warm regards,<br/>The Hiring Team at ${data.employerName}</p>`,
+    );
+
+    const text = `Dear ${data.candidateName},\n\nThank you for your interest in the ${data.jobTitle} role at ${data.employerName}.\n\n${data.rejectionFeedback || 'After careful review, we have chosen to move forward with other candidates at this time.'}\n\nWe wish you the very best in your search.\n\nWarm regards,\nThe ${data.employerName} Hiring Team`;
+
+    return { subject, html, text };
+  },
 };
+
