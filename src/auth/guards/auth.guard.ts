@@ -3,6 +3,7 @@ import {
   CanActivate,
   ExecutionContext,
   UnauthorizedException,
+  ForbiddenException,
 } from '@nestjs/common';
 import type { Request } from 'express';
 import { AuthService } from '../auth.service.js';
@@ -30,12 +31,19 @@ export class AuthGuard implements CanActivate {
         throw new UnauthorizedException('Invalid or expired session');
       }
 
+      // Check if user account is suspended by an administrator
+      if (sessionData.user.status === 'suspended') {
+        throw new ForbiddenException(
+          `Your account has been suspended${sessionData.user.suspensionReason ? `: ${sessionData.user.suspensionReason}` : '.'}`,
+        );
+      }
+
       // Attach user and session to request for downstream use
       (request as any).user = sessionData.user;
       (request as any).session = sessionData.session;
       return true;
     } catch (err) {
-      if (err instanceof UnauthorizedException) {
+      if (err instanceof UnauthorizedException || err instanceof ForbiddenException) {
         throw err;
       }
       throw new UnauthorizedException('Authentication failed');

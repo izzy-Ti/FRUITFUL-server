@@ -1,12 +1,18 @@
 // use prisma-8
 
 model User {
-  id        String   @id
-  email     String   @unique
-  name      String?
-  role      String   @default("job_seeker")
-  createdAt TimestamptzString @default(now())
-  updatedAt temporal.updatedAtString()
+  id               String   @id
+  email            String   @unique
+  name             String?
+  role             String   @default("job_seeker")
+  status           String   @default("active")
+  suspendedAt      TimestamptzString?
+  suspensionReason String?
+  createdAt        TimestamptzString @default(now())
+  updatedAt        temporal.updatedAtString()
+
+  @@index([status])
+  @@index([role])
 }
 
 model JobSeekerProfile {
@@ -32,21 +38,24 @@ model JobSeekerProfile {
 }
 
 model PortfolioProject {
-  id          String   @id
-  profileId   String
-  profile     JobSeekerProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
-  title       String
-  description String?
-  category    String?
-  projectUrl  String?
-  repoUrl     String?
-  images      String[]
-  documents   String[]
-  links       String[]
-  createdAt   TimestamptzString @default(now())
-  updatedAt   temporal.updatedAtString()
+  id               String   @id
+  profileId        String
+  profile          JobSeekerProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  title            String
+  description      String?
+  category         String?
+  projectUrl       String?
+  repoUrl          String?
+  images           String[]
+  documents        String[]
+  links            String[]
+  moderationStatus String   @default("approved")
+  adminNotes       String?
+  createdAt        TimestamptzString @default(now())
+  updatedAt        temporal.updatedAtString()
 
   @@index([profileId])
+  @@index([moderationStatus])
 }
 
 model EmployerProfile {
@@ -184,6 +193,7 @@ model Job {
   publishedAt      TimestamptzString?
   closedAt         TimestamptzString?
   deadline         String?
+  adminNotes       String?
   createdAt        TimestamptzString @default(now())
   updatedAt        temporal.updatedAtString()
 

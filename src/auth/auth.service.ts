@@ -31,6 +31,9 @@ export interface AuthUser {
   emailVerified: boolean;
   image?: string | null;
   role?: string;
+  status?: string;
+  suspendedAt?: string | null;
+  suspensionReason?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -161,6 +164,9 @@ export class AuthService {
 
       if (existing) {
         user.role = existing.role;
+        user.status = existing.status || 'active';
+        user.suspendedAt = existing.suspendedAt || null;
+        user.suspensionReason = existing.suspensionReason || null;
       } else {
         const assignedRole = requestedRole || Role.JOB_SEEKER;
         await this.prisma.client.orm.public.User.create({
@@ -168,8 +174,10 @@ export class AuthService {
           email: user.email,
           name: user.name,
           role: assignedRole,
+          status: 'active',
         });
         user.role = assignedRole;
+        user.status = 'active';
       }
     } catch (err) {
       this.logger.warn(`Could not sync user profile in database: ${err}`);
