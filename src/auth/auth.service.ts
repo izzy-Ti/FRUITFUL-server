@@ -4,10 +4,14 @@ import {
   UnauthorizedException,
   InternalServerErrorException,
   Logger,
+  Inject,
+  Optional,
+  forwardRef,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as jose from 'jose';
 import { PrismaService } from '../database/prisma.service.js';
+import { NotificationsService } from '../notifications/notifications.service.js';
 import { Role } from '../common/enums/role.enum.js';
 import {
   RegisterDto,
@@ -60,6 +64,9 @@ export class AuthService {
   constructor(
     private readonly configService: ConfigService,
     private readonly prisma: PrismaService,
+    @Optional()
+    @Inject(forwardRef(() => NotificationsService))
+    private readonly notificationsService?: NotificationsService,
   ) {
     this.authBaseUrl = this.configService.get<string>('auth.baseUrl') || '';
     this.jwksUrl = this.configService.get<string>('auth.jwksUrl') || '';
@@ -289,6 +296,15 @@ export class AuthService {
       },
     );
 
+    const resetUrl = dto.redirectTo || `${origin || this.defaultOrigin}/auth/reset-password`;
+
+    if (this.notificationsService) {
+      await this.notificationsService.sendPasswordResetEmail({
+        email: dto.email,
+        resetUrl,
+      });
+    }
+
     return result.data;
   }
 
@@ -375,6 +391,13 @@ export class AuthService {
       origin,
     });
 
+    if (this.notificationsService) {
+      await this.notificationsService.sendAccountVerificationEmail({
+        email: dto.email,
+        verificationUrl: `${origin || this.defaultOrigin}/auth/verify-email`,
+      });
+    }
+
     return {
       success: true,
       message: 'Verification email sent. Please check your inbox.',
@@ -395,6 +418,13 @@ export class AuthService {
       },
       origin,
     });
+
+    if (this.notificationsService) {
+      await this.notificationsService.sendAccountVerificationEmail({
+        email,
+        otp: '******',
+      });
+    }
 
     return {
       success: true,

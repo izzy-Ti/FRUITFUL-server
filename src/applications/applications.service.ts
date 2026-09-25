@@ -4,9 +4,12 @@ import {
   BadRequestException,
   ForbiddenException,
   Logger,
+  Inject,
+  Optional,
 } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { PrismaService } from '../database/prisma.service.js';
+import { NotificationsService } from '../notifications/notifications.service.js';
 import {
   ApplyJobDto,
   UpdateApplicationStatusDto,
@@ -69,7 +72,12 @@ export interface FullApplication {
 export class ApplicationsService {
   private readonly logger = new Logger(ApplicationsService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional()
+    @Inject(NotificationsService)
+    private readonly notificationsService?: NotificationsService,
+  ) {}
 
   /**
    * Helper to assemble an application with job, employer, and optionally full candidate details.
@@ -286,6 +294,32 @@ export class ApplicationsService {
     );
 
     this.logger.log(`Job seeker ${userId} submitted application for job ${dto.jobId}.`);
+
+    if (this.notificationsService) {
+      try {
+        const candidateUser = await this.prisma.client.orm.public.User
+          .where({ id: userId })
+          .first();
+        const employer = await this.prisma.client.orm.public.EmployerProfile
+          .where({ id: job.employerId })
+          .first();
+
+        await this.notificationsService.sendApplicationReceivedNotification({
+          candidateUserId: userId,
+          candidateEmail: candidateUser?.email || '',
+          candidateName: candidateUser?.name || 'Applicant',
+          employerUserId: employer?.userId || '',
+          employerEmail: employer?.contactEmail,
+          jobTitle: job.title,
+          companyName: employer?.name || 'Employer',
+          applicationId: application.id,
+          jobId: job.id,
+        });
+      } catch (notifErr) {
+        this.logger.warn(`Failed to dispatch application received notification: ${notifErr}`);
+      }
+    }
+
     return this.assembleApplication(application);
   }
 
@@ -486,6 +520,36 @@ export class ApplicationsService {
         isAdmin ? 'admin' : 'employer',
         dto.employerNotes || null,
       );
+
+      if (this.notificationsService) {
+        try {
+          const profile = await this.prisma.client.orm.public.JobSeekerProfile
+            .where({ id: application.profileId })
+            .first();
+          const candidateUser = profile
+            ? await this.prisma.client.orm.public.User.where({ id: profile.userId }).first()
+            : null;
+          const employer = await this.prisma.client.orm.public.EmployerProfile
+            .where({ id: job.employerId })
+            .first();
+
+          if (candidateUser) {
+            await this.notificationsService.sendApplicationStatusChangeNotification({
+              candidateUserId: candidateUser.id,
+              candidateEmail: candidateUser.email,
+              candidateName: candidateUser.name || 'Candidate',
+              jobTitle: job.title,
+              companyName: employer?.name || 'Employer',
+              applicationId: application.id,
+              newStatus: dto.status,
+              previousStatus,
+              employerNotes: dto.employerNotes || null,
+            });
+          }
+        } catch (notifErr) {
+          this.logger.warn(`Failed to dispatch status change notification: ${notifErr}`);
+        }
+      }
     }
 
     const updated = await this.prisma.client.orm.public.JobApplication

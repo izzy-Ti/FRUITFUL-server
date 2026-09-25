@@ -3,9 +3,12 @@ import {
   NotFoundException,
   BadRequestException,
   Logger,
+  Inject,
+  Optional,
 } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { PrismaService } from '../database/prisma.service.js';
+import { NotificationsService } from '../notifications/notifications.service.js';
 import { EmployersService } from '../employers/employers.service.js';
 import { JobsService } from '../jobs/jobs.service.js';
 import { JobSeekersService } from '../job-seekers/job-seekers.service.js';
@@ -35,6 +38,9 @@ export class AdminService {
     private readonly categoriesService: CategoriesService,
     private readonly skillsService: SkillsService,
     private readonly controlledDataService: ControlledDataService,
+    @Optional()
+    @Inject(NotificationsService)
+    private readonly notificationsService?: NotificationsService,
   ) {}
 
   // ==========================================
@@ -239,6 +245,18 @@ export class AdminService {
       targetId: targetUserId,
       details: { email: user.email, reason: dto.reason },
     });
+
+    if (this.notificationsService) {
+      await this.notificationsService.sendAdminModerationAlert({
+        adminUserId,
+        alertType: 'user_suspended',
+        title: `Account Suspended: ${user.email}`,
+        message: `Account has been suspended by administrator. Reason: ${dto.reason}`,
+        entityType: 'User',
+        entityId: targetUserId,
+        targetUserId,
+      });
+    }
 
     this.logger.log(`Admin ${adminUserId} suspended user ${targetUserId}. Reason: ${dto.reason}`);
 
@@ -566,6 +584,17 @@ export class AdminService {
       targetId: projectId,
       details: { title: project.title, status: dto.status, adminNotes: dto.adminNotes || null },
     });
+
+    if (this.notificationsService) {
+      await this.notificationsService.sendAdminModerationAlert({
+        adminUserId,
+        alertType: 'portfolio_flagged',
+        title: `Portfolio Moderation: ${project.title}`,
+        message: `Portfolio project "${project.title}" has been moderated to "${dto.status}".`,
+        entityType: 'PortfolioProject',
+        entityId: projectId,
+      });
+    }
 
     return {
       id: project.id,

@@ -15,6 +15,7 @@ import { ApplicationsModule } from './applications/applications.module.js';
 import { AdminModule } from './admin/admin.module.js';
 import { CategoriesModule } from './categories/categories.module.js';
 import { ControlledDataModule } from './controlled-data/controlled-data.module.js';
+import { NotificationsModule } from './notifications/notifications.module.js';
 import { LoggerMiddleware } from './common/index.js';
 
 export const { ObserveModule, ObserveInstrument } = createObserveModule();
@@ -46,6 +47,7 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
     JobsModule,
     ApplicationsModule,
     AdminModule,
+    NotificationsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

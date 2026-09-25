@@ -9,6 +9,7 @@ import { AuthModule } from '../auth/auth.module.js';
 import { CategoriesModule } from '../categories/categories.module.js';
 import { SkillsModule } from '../skills/skills.module.js';
 import { ControlledDataModule } from '../controlled-data/controlled-data.module.js';
+import { NotificationsModule } from '../notifications/notifications.module.js';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { ControlledDataModule } from '../controlled-data/controlled-data.module.
     CategoriesModule,
     SkillsModule,
     ControlledDataModule,
+    NotificationsModule,
   ],
   controllers: [AdminController],
   providers: [AdminService],

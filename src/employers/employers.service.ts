@@ -3,9 +3,12 @@ import {
   NotFoundException,
   BadRequestException,
   Logger,
+  Inject,
+  Optional,
 } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { PrismaService } from '../database/prisma.service.js';
+import { NotificationsService } from '../notifications/notifications.service.js';
 import {
   UpsertEmployerProfileDto,
   VerifyEmployerDto,
@@ -40,7 +43,12 @@ export interface FullEmployerProfile {
 export class EmployersService {
   private readonly logger = new Logger(EmployersService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional()
+    @Inject(NotificationsService)
+    private readonly notificationsService?: NotificationsService,
+  ) {}
 
   /**
    * Assemble full employer profile with linked user details.
@@ -288,6 +296,27 @@ export class EmployersService {
     this.logger.log(
       `Employer ${employerId} verification status set to "${dto.status}".`,
     );
+
+    if (this.notificationsService) {
+      try {
+        const user = await this.prisma.client.orm.public.User
+          .where({ id: existing.userId })
+          .first();
+        const employerEmail = existing.contactEmail || user?.email || '';
+
+        if (employerEmail) {
+          await this.notificationsService.sendEmployerVerificationNotification({
+            employerUserId: existing.userId,
+            employerEmail,
+            companyName: existing.name,
+            status: dto.status,
+            rejectionReason: dto.rejectionReason || null,
+          });
+        }
+      } catch (notifErr) {
+        this.logger.warn(`Failed to dispatch employer verification notification: ${notifErr}`);
+      }
+    }
 
     const updated = await this.prisma.client.orm.public.EmployerProfile
       .where({ id: employerId })
