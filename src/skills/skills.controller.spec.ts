@@ -20,7 +20,11 @@ describe('SkillsController', () => {
     findAll: vi.fn(),
     findById: vi.fn(),
     create: vi.fn(),
+    update: vi.fn(),
     delete: vi.fn(),
+    getTaxonomy: vi.fn(),
+    batchCreate: vi.fn(),
+    seedStandardSkills: vi.fn(),
   };
 
   const mockAuthService = {
@@ -72,7 +76,7 @@ describe('SkillsController', () => {
   });
 
   it('should update a skill', async () => {
-    mockSkillsService.update = vi.fn().mockResolvedValue({ ...mockSkill, name: 'NestJS Pro' });
+    mockSkillsService.update.mockResolvedValue({ ...mockSkill, name: 'NestJS Pro' });
 
     const res = await controller.update('skill-1', { name: 'NestJS Pro' });
     expect(res.message).toBe('Skill successfully updated.');
@@ -80,21 +84,21 @@ describe('SkillsController', () => {
   });
 
   it('should get skills taxonomy', async () => {
-    mockSkillsService.getTaxonomy = vi.fn().mockResolvedValue({ totalSkills: 1, categories: {} });
+    mockSkillsService.getTaxonomy.mockResolvedValue({ totalSkills: 1, categories: {} });
 
     const res = await controller.getTaxonomy();
     expect(res.totalSkills).toBe(1);
   });
 
   it('should batch create skills', async () => {
-    mockSkillsService.batchCreate = vi.fn().mockResolvedValue({ created: [mockSkill], existing: [] });
+    mockSkillsService.batchCreate.mockResolvedValue({ created: [mockSkill], existing: [] });
 
     const res = await controller.batchCreate({ skills: [{ name: 'NestJS' }] });
     expect(res.created).toHaveLength(1);
   });
 
   it('should seed standard skills', async () => {
-    mockSkillsService.seedStandardSkills = vi.fn().mockResolvedValue({ seededCount: 15, message: 'Seeded' });
+    mockSkillsService.seedStandardSkills.mockResolvedValue({ seededCount: 15, message: 'Seeded' });
 
     const res = await controller.seedStandardSkills();
     expect(res.seededCount).toBe(15);

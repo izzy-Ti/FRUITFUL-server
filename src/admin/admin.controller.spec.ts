@@ -216,7 +216,7 @@ describe('AdminController', () => {
     it('should export report as json', async () => {
       mockAdminService.exportReport.mockResolvedValue({ format: 'json', data: [] });
       const res = await controller.exportReport('jobs', 'json');
-      expect(res.format).toBe('json');
+      expect((res as any)?.format).toBe('json');
     });
 
     it('should export report as csv', async () => {
