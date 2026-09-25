@@ -420,9 +420,10 @@ describe('JobSeekersService', () => {
       const res = await service.getFullProfileById('profile-1', { id: 'emp-user', role: 'employer' });
       expect(res.id).toBe('profile-1');
       expect(res.phone).toBe(mockProfile.phone);
+      expect(res.cvUrl).toBe(mockProfile.cvUrl);
     });
 
-    it('should mask phone and email for anonymous/public visitors', async () => {
+    it('should mask phone, email, and CV URL for anonymous/public visitors', async () => {
       mockPrismaService.client.orm.public.JobSeekerProfile.where.mockReturnValue({
         first: vi.fn().mockResolvedValue({ ...mockProfile, visibility: 'public' }),
       });
@@ -446,7 +447,44 @@ describe('JobSeekersService', () => {
 
       const res = await service.getFullProfileById('profile-1', undefined);
       expect(res.phone).toBeNull();
+      expect(res.cvUrl).toBeNull();
       expect(res.user?.email).toBe('***@***.***');
+    });
+
+    it('should reject third-party access when profile is pending approval', async () => {
+      mockPrismaService.client.orm.public.JobSeekerProfile.where.mockReturnValue({
+        first: vi.fn().mockResolvedValue({ ...mockProfile, approvalStatus: 'pending' }),
+      });
+
+      await expect(
+        service.getFullProfileById('profile-1', { id: 'emp-1', role: 'employer' }),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('should open portfolio projects for public profile', async () => {
+      mockPrismaService.client.orm.public.JobSeekerProfile.where.mockReturnValue({
+        first: vi.fn().mockResolvedValue({ ...mockProfile, visibility: 'public' }),
+      });
+      mockPrismaService.client.orm.public.PortfolioProject.where.mockReturnValue({
+        orderBy: vi.fn().mockReturnValue({ all: vi.fn().mockResolvedValue([{ id: 'proj-1', title: 'Work' }]) }),
+      });
+
+      const res = await service.getPortfolioByProfileId('profile-1', undefined);
+      expect(res).toHaveLength(1);
+      expect(res[0].title).toBe('Work');
+    });
+
+    it('should enforce parent profile visibility on getPortfolioProjectById', async () => {
+      mockPrismaService.client.orm.public.PortfolioProject.where.mockReturnValue({
+        first: vi.fn().mockResolvedValue({ id: 'proj-1', profileId: 'profile-1', title: 'Private Work' }),
+      });
+      mockPrismaService.client.orm.public.JobSeekerProfile.where.mockReturnValue({
+        first: vi.fn().mockResolvedValue({ ...mockProfile, visibility: 'private' }),
+      });
+
+      await expect(
+        service.getPortfolioProjectById('proj-1', { id: 'other-user', role: 'job_seeker' }),
+      ).rejects.toThrow(ForbiddenException);
     });
   });
 

@@ -141,6 +141,11 @@ export class JobSeekersService {
     const isAdmin = viewer?.role === Role.ADMIN;
     const isEmployer = viewer?.role === Role.EMPLOYER;
 
+    // Check approval status: unapproved profiles are only visible to the owner and admins
+    if (!isOwner && !isAdmin && profile.approvalStatus && profile.approvalStatus !== 'approved') {
+      throw new ForbiddenException('This job seeker profile is pending administrative approval.');
+    }
+
     // Enforce controlled visibility rules
     if (!isOwner && !isAdmin) {
       if (profile.visibility === 'private') {
@@ -155,9 +160,10 @@ export class JobSeekersService {
 
     const assembled = await this.assembleFullProfile(profile);
 
-    // If viewer is anonymous or non-employer, protect contact details
+    // If viewer is anonymous or non-employer, protect contact details according to privacy rules
     if (!isOwner && !isAdmin && !isEmployer) {
       assembled.phone = null;
+      assembled.cvUrl = null;
       if (assembled.user) {
         assembled.user.email = '***@***.***';
       }
@@ -500,6 +506,7 @@ export class JobSeekersService {
         return {
           ...p,
           phone: null,
+          cvUrl: null,
           user: p.user
             ? {
                 ...p.user,
@@ -895,13 +902,80 @@ export class JobSeekersService {
       .all();
   }
 
-  async getPortfolioProjectById(projectId: string) {
+  /**
+   * Open candidate portfolio projects with controlled profile visibility applied.
+   */
+  async getPortfolioByProfileId(
+    profileId: string,
+    viewer?: { id?: string; role?: string },
+  ) {
+    const profile = await this.prisma.client.orm.public.JobSeekerProfile
+      .where({ id: profileId })
+      .first();
+
+    if (!profile) {
+      throw new NotFoundException(`Job seeker profile with ID "${profileId}" was not found.`);
+    }
+
+    const isOwner = viewer?.id && viewer.id === profile.userId;
+    const isAdmin = viewer?.role === Role.ADMIN;
+    const isEmployer = viewer?.role === Role.EMPLOYER;
+
+    if (!isOwner && !isAdmin) {
+      if (profile.approvalStatus && profile.approvalStatus !== 'approved') {
+        throw new ForbiddenException('This job seeker profile is pending administrative approval.');
+      }
+      if (profile.visibility === 'private') {
+        throw new ForbiddenException('This job seeker profile is set to private.');
+      }
+      if (profile.visibility === 'employers_only' && !isEmployer) {
+        throw new ForbiddenException(
+          'This profile is restricted to verified employers only.',
+        );
+      }
+    }
+
+    return await this.prisma.client.orm.public.PortfolioProject
+      .where({ profileId: profile.id })
+      .orderBy((p) => p.createdAt.desc())
+      .all();
+  }
+
+  async getPortfolioProjectById(
+    projectId: string,
+    viewer?: { id?: string; role?: string },
+  ) {
     const project = await this.prisma.client.orm.public.PortfolioProject
       .where({ id: projectId })
       .first();
 
     if (!project) {
       throw new NotFoundException(`Portfolio project with ID "${projectId}" was not found.`);
+    }
+
+    // Verify parent profile visibility rules
+    const profile = await this.prisma.client.orm.public.JobSeekerProfile
+      .where({ id: project.profileId })
+      .first();
+
+    if (profile) {
+      const isOwner = viewer?.id && viewer.id === profile.userId;
+      const isAdmin = viewer?.role === Role.ADMIN;
+      const isEmployer = viewer?.role === Role.EMPLOYER;
+
+      if (!isOwner && !isAdmin) {
+        if (profile.approvalStatus && profile.approvalStatus !== 'approved') {
+          throw new ForbiddenException('This job seeker profile is pending administrative approval.');
+        }
+        if (profile.visibility === 'private') {
+          throw new ForbiddenException('This job seeker profile is set to private.');
+        }
+        if (profile.visibility === 'employers_only' && !isEmployer) {
+          throw new ForbiddenException(
+            'This profile is restricted to verified employers only.',
+          );
+        }
+      }
     }
 
     return project;

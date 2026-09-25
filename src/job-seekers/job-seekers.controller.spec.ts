@@ -54,6 +54,7 @@ describe('JobSeekersController', () => {
     updateSkillAssignment: vi.fn(),
     removeSkill: vi.fn(),
     getPortfolioProjects: vi.fn(),
+    getPortfolioByProfileId: vi.fn(),
     addPortfolioProject: vi.fn(),
     getPortfolioProjectById: vi.fn(),
     updatePortfolioProject: vi.fn(),
@@ -99,11 +100,38 @@ describe('JobSeekersController', () => {
       expect(res.profile.bio).toBe('Updated bio');
     });
 
-    it('should get public profile by id', async () => {
+    it('should get public profile by id for authenticated viewer', async () => {
       mockJobSeekersService.getFullProfileById.mockResolvedValue(mockProfile);
 
       const res = await controller.getProfileById('profile-1', mockUser);
       expect(res).toEqual(mockProfile);
+      expect(mockJobSeekersService.getFullProfileById).toHaveBeenCalledWith('profile-1', mockUser);
+    });
+
+    it('should open public profile for anonymous visitor with protected contact info', async () => {
+      const protectedProfile = {
+        ...mockProfile,
+        phone: null,
+        cvUrl: null,
+        user: { ...mockProfile.user, email: '***@***.***' },
+      };
+      mockJobSeekersService.getFullProfileById.mockResolvedValue(protectedProfile);
+
+      const res = await controller.getProfileById('profile-1', undefined);
+      expect(res.phone).toBeNull();
+      expect(res.cvUrl).toBeNull();
+      expect(res.user.email).toBe('***@***.***');
+      expect(mockJobSeekersService.getFullProfileById).toHaveBeenCalledWith('profile-1', undefined);
+    });
+
+    it('should open portfolio projects by profile id', async () => {
+      const mockProjects = [{ id: 'proj-1', title: 'Fruitful Journey Web App' }];
+      mockJobSeekersService.getPortfolioByProfileId.mockResolvedValue(mockProjects);
+
+      const res = await controller.getPortfolioByProfileId('profile-1', undefined);
+      expect(res.count).toBe(1);
+      expect(res.projects).toEqual(mockProjects);
+      expect(mockJobSeekersService.getPortfolioByProfileId).toHaveBeenCalledWith('profile-1', undefined);
     });
 
     it('should search talent directory', async () => {
@@ -287,6 +315,14 @@ describe('JobSeekersController', () => {
 
       const res = await controller.deletePortfolioProject(mockUser, 'proj-1');
       expect(res.success).toBe(true);
+    });
+
+    it('should get portfolio project by id with viewer context', async () => {
+      mockJobSeekersService.getPortfolioProjectById.mockResolvedValue({ id: 'proj-1', title: 'App' });
+
+      const res = await controller.getPortfolioProjectById('proj-1', mockUser);
+      expect(res).toEqual({ id: 'proj-1', title: 'App' });
+      expect(mockJobSeekersService.getPortfolioProjectById).toHaveBeenCalledWith('proj-1', mockUser);
     });
   });
 });

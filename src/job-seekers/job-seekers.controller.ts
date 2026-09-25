@@ -28,6 +28,7 @@ import {
   ModerateTalentDto,
 } from './dto/index.js';
 import { AuthGuard } from '../auth/guards/auth.guard.js';
+import { OptionalAuthGuard } from '../auth/guards/optional-auth.guard.js';
 import { RolesGuard } from '../auth/guards/roles.guard.js';
 import { Roles } from '../auth/decorators/roles.decorator.js';
 import { CurrentUser } from '../auth/decorators/current-user.decorator.js';
@@ -64,12 +65,25 @@ export class JobSeekersController {
   }
 
   @Get('profile/:id')
-  @UseGuards(AuthGuard)
+  @UseGuards(OptionalAuthGuard)
   async getProfileById(
     @Param('id') id: string,
-    @CurrentUser() viewer: AuthUser,
+    @CurrentUser() viewer?: AuthUser,
   ) {
     return this.jobSeekersService.getFullProfileById(id, viewer);
+  }
+
+  @Get('profile/:id/portfolio')
+  @UseGuards(OptionalAuthGuard)
+  async getPortfolioByProfileId(
+    @Param('id') id: string,
+    @CurrentUser() viewer?: AuthUser,
+  ) {
+    const projects = await this.jobSeekersService.getPortfolioByProfileId(id, viewer);
+    return {
+      count: projects.length,
+      projects,
+    };
   }
 
   @Get()
@@ -338,9 +352,12 @@ export class JobSeekersController {
   }
 
   @Get('portfolio/:id')
-  @UseGuards(AuthGuard)
-  async getPortfolioProjectById(@Param('id') id: string) {
-    return this.jobSeekersService.getPortfolioProjectById(id);
+  @UseGuards(OptionalAuthGuard)
+  async getPortfolioProjectById(
+    @Param('id') id: string,
+    @CurrentUser() viewer?: AuthUser,
+  ) {
+    return this.jobSeekersService.getPortfolioProjectById(id, viewer);
   }
 
   @Put('portfolio/:id')
