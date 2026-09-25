@@ -6,6 +6,9 @@ import { EmployersModule } from '../employers/employers.module.js';
 import { JobsModule } from '../jobs/jobs.module.js';
 import { JobSeekersModule } from '../job-seekers/job-seekers.module.js';
 import { AuthModule } from '../auth/auth.module.js';
+import { CategoriesModule } from '../categories/categories.module.js';
+import { SkillsModule } from '../skills/skills.module.js';
+import { ControlledDataModule } from '../controlled-data/controlled-data.module.js';
 
 @Module({
   imports: [
@@ -14,6 +17,9 @@ import { AuthModule } from '../auth/auth.module.js';
     JobsModule,
     JobSeekersModule,
     AuthModule,
+    CategoriesModule,
+    SkillsModule,
+    ControlledDataModule,
   ],
   controllers: [AdminController],
   providers: [AdminService],

@@ -7,9 +7,11 @@ import {
   Body,
   Param,
   Query,
+  Res,
   UseGuards,
   HttpCode,
   HttpStatus,
+  BadRequestException,
 } from '@nestjs/common';
 import { AdminService } from './admin.service.js';
 import {
@@ -236,4 +238,193 @@ export class AdminController {
   ) {
     return this.adminService.removePortfolioProject(admin.id, id);
   }
+
+  // ==========================================
+  // ACTIVITY & EMPLOYMENT IMPACT METRICS
+  // ==========================================
+
+  @Get('metrics/activity')
+  async getPlatformActivityMetrics() {
+    return this.adminService.getPlatformActivityMetrics();
+  }
+
+  @Get('metrics/employment-impact')
+  async getEmploymentImpactMetrics() {
+    return this.adminService.getEmploymentImpactMetrics();
+  }
+
+  // ==========================================
+  // OPERATIONAL REPORTS EXPORT
+  // ==========================================
+
+  @Get('reports/available')
+  getAvailableReports() {
+    return this.adminService.getAvailableReports();
+  }
+
+  @Get('reports/export')
+  async exportReport(
+    @Query('type') type: string,
+    @Query('format') format?: 'csv' | 'json',
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+    @Query('status') status?: string,
+    @Query('role') role?: string,
+    @Query('category') category?: string,
+    @Query('verificationStatus') verificationStatus?: string,
+    @Res({ passthrough: true }) res?: any,
+  ) {
+    if (!type) {
+      throw new BadRequestException('Query parameter "type" is required for exporting reports.');
+    }
+    const result = await this.adminService.exportReport(type, format || 'csv', {
+      startDate,
+      endDate,
+      status,
+      role,
+      category,
+      verificationStatus,
+    });
+
+    if (result.format === 'csv') {
+      if (res && typeof res.setHeader === 'function') {
+        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+        res.setHeader('Content-Disposition', `attachment; filename="${result.filename}"`);
+      }
+      return result.content;
+    }
+
+    return result;
+  }
+
+  // ==========================================
+  // CATEGORIES MANAGEMENT
+  // ==========================================
+
+  @Get('categories')
+  async listCategories(@Query() query?: any) {
+    const categories = await this.adminService.listCategories(query);
+    return {
+      count: categories.length,
+      categories,
+    };
+  }
+
+  @Post('categories')
+  @HttpCode(HttpStatus.CREATED)
+  async createCategory(@Body() dto: any) {
+    const category = await this.adminService.createCategory(dto);
+    return {
+      message: 'Category successfully created.',
+      category,
+    };
+  }
+
+  @Patch('categories/:id')
+  async updateCategory(@Param('id') id: string, @Body() dto: any) {
+    const category = await this.adminService.updateCategory(id, dto);
+    return {
+      message: 'Category successfully updated.',
+      category,
+    };
+  }
+
+  @Delete('categories/:id')
+  async deleteCategory(@Param('id') id: string) {
+    return this.adminService.deleteCategory(id);
+  }
+
+  @Post('categories/seed')
+  async seedCategories() {
+    return this.adminService.seedCategories();
+  }
+
+  // ==========================================
+  // SKILLS MANAGEMENT
+  // ==========================================
+
+  @Get('skills')
+  async listSkills(@Query() query?: any) {
+    const skills = await this.adminService.listSkills(query);
+    return {
+      count: skills.length,
+      skills,
+    };
+  }
+
+  @Post('skills')
+  @HttpCode(HttpStatus.CREATED)
+  async createSkill(@Body() dto: any) {
+    const skill = await this.adminService.createSkill(dto);
+    return {
+      message: 'Skill successfully created.',
+      skill,
+    };
+  }
+
+  @Patch('skills/:id')
+  async updateSkill(@Param('id') id: string, @Body() dto: any) {
+    const skill = await this.adminService.updateSkill(id, dto);
+    return {
+      message: 'Skill successfully updated.',
+      skill,
+    };
+  }
+
+  @Delete('skills/:id')
+  async deleteSkill(@Param('id') id: string) {
+    return this.adminService.deleteSkill(id);
+  }
+
+  @Post('skills/seed')
+  async seedSkills() {
+    return this.adminService.seedSkills();
+  }
+
+  // ==========================================
+  // CONTROLLED PLATFORM DATA MANAGEMENT
+  // ==========================================
+
+  @Get('controlled-data')
+  async listControlledData(@Query() query?: any) {
+    const items = await this.adminService.listControlledData(query);
+    return {
+      count: items.length,
+      items,
+    };
+  }
+
+  @Post('controlled-data')
+  @HttpCode(HttpStatus.CREATED)
+  async createControlledData(@Body() dto: any) {
+    const item = await this.adminService.createControlledData(dto);
+    return {
+      message: 'Controlled platform data item successfully created.',
+      item,
+    };
+  }
+
+  @Patch('controlled-data/:id')
+  async updateControlledData(@Param('id') id: string, @Body() dto: any) {
+    const item = await this.adminService.updateControlledData(id, dto);
+    return {
+      message: 'Controlled platform data item successfully updated.',
+      item,
+    };
+  }
+
+  @Delete('controlled-data/:id')
+  async deleteControlledData(
+    @Param('id') id: string,
+    @Query('force') force?: string,
+  ) {
+    const forceBool = force === 'true';
+    return this.adminService.deleteControlledData(id, forceBool);
+  }
+
+  @Post('controlled-data/seed')
+  async seedControlledData() {
+    return this.adminService.seedControlledData();
+  }
 }
+

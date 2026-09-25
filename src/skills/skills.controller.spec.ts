@@ -70,4 +70,34 @@ describe('SkillsController', () => {
     const res = await controller.delete('skill-1');
     expect(res.success).toBe(true);
   });
+
+  it('should update a skill', async () => {
+    mockSkillsService.update = vi.fn().mockResolvedValue({ ...mockSkill, name: 'NestJS Pro' });
+
+    const res = await controller.update('skill-1', { name: 'NestJS Pro' });
+    expect(res.message).toBe('Skill successfully updated.');
+    expect(res.skill.name).toBe('NestJS Pro');
+  });
+
+  it('should get skills taxonomy', async () => {
+    mockSkillsService.getTaxonomy = vi.fn().mockResolvedValue({ totalSkills: 1, categories: {} });
+
+    const res = await controller.getTaxonomy();
+    expect(res.totalSkills).toBe(1);
+  });
+
+  it('should batch create skills', async () => {
+    mockSkillsService.batchCreate = vi.fn().mockResolvedValue({ created: [mockSkill], existing: [] });
+
+    const res = await controller.batchCreate({ skills: [{ name: 'NestJS' }] });
+    expect(res.created).toHaveLength(1);
+  });
+
+  it('should seed standard skills', async () => {
+    mockSkillsService.seedStandardSkills = vi.fn().mockResolvedValue({ seededCount: 15, message: 'Seeded' });
+
+    const res = await controller.seedStandardSkills();
+    expect(res.seededCount).toBe(15);
+  });
 });
+

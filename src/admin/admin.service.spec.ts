@@ -7,6 +7,9 @@ import { EmployersService } from '../employers/employers.service.js';
 import { JobsService } from '../jobs/jobs.service.js';
 import { JobSeekersService } from '../job-seekers/job-seekers.service.js';
 import { Role } from '../common/enums/role.enum.js';
+import { CategoriesService } from '../categories/categories.service.js';
+import { SkillsService } from '../skills/skills.service.js';
+import { ControlledDataService } from '../controlled-data/controlled-data.service.js';
 
 describe('AdminService', () => {
   let service: AdminService;
@@ -91,6 +94,42 @@ describe('AdminService', () => {
             Job: createMockChain(mockJob),
             JobSeekerProfile: createMockChain(mockJobSeekerProfile),
             PortfolioProject: createMockChain(mockPortfolioProject),
+            JobApplication: createMockChain({
+              id: 'app-1',
+              jobId: 'job-1',
+              profileId: 'profile-1',
+              status: 'hired',
+              appliedAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            }),
+            ApplicationStatusHistory: createMockChain({
+              id: 'ash-1',
+              applicationId: 'app-1',
+              newStatus: 'hired',
+              previousStatus: 'offered',
+              createdAt: new Date().toISOString(),
+            }),
+            Skill: createMockChain({
+              id: 'sk-1',
+              name: 'TypeScript',
+              category: 'Software Development',
+            }),
+            Category: createMockChain({
+              id: 'cat-1',
+              name: 'Software Development',
+              slug: 'software-development',
+            }),
+            ControlledData: createMockChain({
+              id: 'cd-1',
+              category: 'employment_types',
+              key: 'full_time',
+              label: 'Full Time',
+            }),
+            ProfileSkill: createMockChain({
+              id: 'ps-1',
+              profileId: 'profile-1',
+              skillId: 'sk-1',
+            }),
           },
         },
       },
@@ -116,6 +155,30 @@ describe('AdminService', () => {
       moderateTalentProfile: vi.fn().mockResolvedValue({ ...mockJobSeekerProfile, approvalStatus: 'approved' }),
     };
 
+    const mockCategoriesService = {
+      findAll: vi.fn().mockResolvedValue([{ id: 'cat-1' }]),
+      create: vi.fn().mockResolvedValue({ id: 'cat-1' }),
+      update: vi.fn().mockResolvedValue({ id: 'cat-1' }),
+      delete: vi.fn().mockResolvedValue({ success: true }),
+      seedDefaultCategories: vi.fn().mockResolvedValue({ seededCount: 10 }),
+    };
+
+    const mockSkillsService = {
+      findAll: vi.fn().mockResolvedValue([{ id: 'sk-1' }]),
+      create: vi.fn().mockResolvedValue({ id: 'sk-1' }),
+      update: vi.fn().mockResolvedValue({ id: 'sk-1' }),
+      delete: vi.fn().mockResolvedValue({ success: true }),
+      seedStandardSkills: vi.fn().mockResolvedValue({ seededCount: 15 }),
+    };
+
+    const mockControlledDataService = {
+      findAll: vi.fn().mockResolvedValue([{ id: 'cd-1' }]),
+      create: vi.fn().mockResolvedValue({ id: 'cd-1' }),
+      update: vi.fn().mockResolvedValue({ id: 'cd-1' }),
+      delete: vi.fn().mockResolvedValue({ success: true }),
+      seedStandardData: vi.fn().mockResolvedValue({ seededCount: 20 }),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AdminService,
@@ -123,6 +186,9 @@ describe('AdminService', () => {
         { provide: EmployersService, useValue: mockEmployersService },
         { provide: JobsService, useValue: mockJobsService },
         { provide: JobSeekersService, useValue: mockJobSeekersService },
+        { provide: CategoriesService, useValue: mockCategoriesService },
+        { provide: SkillsService, useValue: mockSkillsService },
+        { provide: ControlledDataService, useValue: mockControlledDataService },
       ],
     }).compile();
 
@@ -270,4 +336,87 @@ describe('AdminService', () => {
       expect(stats.portfolio.total).toBe(1);
     });
   });
+
+  describe('Platform Activity & Employment Impact Metrics', () => {
+    it('should calculate platform activity volume and timeline', async () => {
+      const activity = await service.getPlatformActivityMetrics();
+      expect(activity.timeframes).toBeDefined();
+      expect(activity.funnel).toBeDefined();
+      expect(activity.activityFeed).toBeInstanceOf(Array);
+    });
+
+    it('should calculate employment impact and placement metrics', async () => {
+      const impact = await service.getEmploymentImpactMetrics();
+      expect(impact.totalPlacements).toBe(1);
+      expect(impact.placementRatePercent).toBeDefined();
+      expect(impact.jobFillRatePercent).toBeDefined();
+      expect(impact.averageTimeToHireDays).toBeDefined();
+    });
+  });
+
+  describe('Operational Reports Export', () => {
+    it('should list available reports', () => {
+      const reports = service.getAvailableReports();
+      expect(reports.length).toBeGreaterThanOrEqual(5);
+      expect(reports.some((r) => r.id === 'employment_impact')).toBe(true);
+      expect(reports.some((r) => r.id === 'jobs')).toBe(true);
+    });
+
+    it('should export employment impact report as json', async () => {
+      const res = await service.exportReport('employment_impact', 'json');
+      expect(res.format).toBe('json');
+      expect(res.data).toBeInstanceOf(Array);
+    });
+
+    it('should export jobs report as csv', async () => {
+      const res = await service.exportReport('jobs', 'csv');
+      expect(res.format).toBe('csv');
+      expect(res.filename).toContain('fruitful-report-jobs');
+      expect(typeof res.content).toBe('string');
+    });
+
+    it('should export applications report as csv', async () => {
+      const res = await service.exportReport('applications', 'csv');
+      expect(res.format).toBe('csv');
+    });
+
+    it('should export users report as json', async () => {
+      const res = await service.exportReport('users', 'json');
+      expect(res.format).toBe('json');
+    });
+
+    it('should export employers report as csv', async () => {
+      const res = await service.exportReport('employers', 'csv');
+      expect(res.format).toBe('csv');
+    });
+
+    it('should export skills demand report as json', async () => {
+      const res = await service.exportReport('skills_demand', 'json');
+      expect(res.format).toBe('json');
+    });
+  });
+
+  describe('Controlled Platform Data & Taxonomy Delegation', () => {
+    it('should delegate category methods', async () => {
+      const list = await service.listCategories();
+      expect(list).toHaveLength(1);
+      const created = await service.createCategory({ name: 'Tech' });
+      expect(created.id).toBe('cat-1');
+    });
+
+    it('should delegate skill methods', async () => {
+      const list = await service.listSkills();
+      expect(list).toHaveLength(1);
+      const seeded = await service.seedSkills();
+      expect(seeded.seededCount).toBe(15);
+    });
+
+    it('should delegate controlled data methods', async () => {
+      const list = await service.listControlledData();
+      expect(list).toHaveLength(1);
+      const seeded = await service.seedControlledData();
+      expect(seeded.seededCount).toBe(20);
+    });
+  });
 });
+

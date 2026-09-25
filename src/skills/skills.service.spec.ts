@@ -141,4 +141,55 @@ describe('SkillsService', () => {
       expect(result.success).toBe(true);
     });
   });
+
+  describe('update', () => {
+    it('should update skill name and category', async () => {
+      mockPrismaService.client.orm.public.Skill.where.mockReturnValue({
+        first: vi.fn().mockResolvedValue(mockSkill),
+        update: vi.fn().mockResolvedValue({ ...mockSkill, name: 'TypeScript Pro' }),
+      });
+
+      const result = await service.update('skill-1', { name: 'TypeScript Pro' });
+      expect(result.name).toBe('TypeScript Pro');
+    });
+  });
+
+  describe('batchCreate', () => {
+    it('should process batch skills correctly', async () => {
+      mockPrismaService.client.orm.public.Skill.where.mockReturnValue({
+        first: vi.fn().mockResolvedValue(null),
+      });
+      mockPrismaService.client.orm.public.Skill.create.mockResolvedValue(mockSkill);
+
+      const result = await service.batchCreate([
+        { name: 'TypeScript', category: 'Engineering' },
+      ]);
+      expect(result.created).toHaveLength(1);
+    });
+  });
+
+  describe('getTaxonomy', () => {
+    it('should return skills grouped by category', async () => {
+      mockPrismaService.client.orm.public.Skill.orderBy = vi.fn().mockReturnValue({
+        all: vi.fn().mockResolvedValue([mockSkill]),
+      });
+
+      const result = await service.getTaxonomy();
+      expect(result.totalSkills).toBe(1);
+      expect(result.categories['Engineering']).toBeDefined();
+    });
+  });
+
+  describe('seedStandardSkills', () => {
+    it('should seed standard skills', async () => {
+      mockPrismaService.client.orm.public.Skill.where.mockReturnValue({
+        first: vi.fn().mockResolvedValue(null),
+      });
+      mockPrismaService.client.orm.public.Skill.create.mockResolvedValue(mockSkill);
+
+      const result = await service.seedStandardSkills();
+      expect(result.seededCount).toBeGreaterThan(0);
+    });
+  });
 });
+

@@ -238,3 +238,36 @@ model ApplicationStatusHistory {
   @@index([applicationId])
   @@index([newStatus])
 }
+
+model Category {
+  id           String   @id
+  name         String   @unique
+  slug         String   @unique
+  description  String?
+  icon         String?
+  isActive     Boolean  @default(true)
+  displayOrder Int      @default(0)
+  createdAt    TimestamptzString @default(now())
+  updatedAt    temporal.updatedAtString()
+
+  @@index([isActive])
+  @@index([displayOrder])
+}
+
+model ControlledData {
+  id           String   @id
+  category     String
+  key          String
+  label        String
+  value        String?
+  description  String?
+  displayOrder Int      @default(0)
+  isActive     Boolean  @default(true)
+  isSystem     Boolean  @default(false)
+  createdAt    TimestamptzString @default(now())
+  updatedAt    temporal.updatedAtString()
+
+  @@unique([category, key])
+  @@index([category])
+  @@index([isActive])
+}
