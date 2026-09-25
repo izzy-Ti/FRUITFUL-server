@@ -28,6 +28,7 @@ describe('AdminController', () => {
     approveUser: vi.fn(),
     listEmployers: vi.fn(),
     getEmployerById: vi.fn(),
+    getEmployerVerificationHistory: vi.fn(),
     verifyEmployer: vi.fn(),
     listJobs: vi.fn(),
     approveJob: vi.fn(),
@@ -57,6 +58,8 @@ describe('AdminController', () => {
     updateControlledData: vi.fn(),
     deleteControlledData: vi.fn(),
     seedControlledData: vi.fn(),
+    listAuditLogs: vi.fn(),
+    getEntityAuditTrail: vi.fn(),
   };
 
   const mockAuthService = {
@@ -127,6 +130,16 @@ describe('AdminController', () => {
       mockAdminService.verifyEmployer.mockResolvedValue({ id: 'emp-1', verificationStatus: 'verified' });
       const res = await controller.verifyEmployer(mockAdminUser, 'emp-1', 'verified');
       expect(res.message).toContain('verified');
+    });
+
+    it('should get employer verification history', async () => {
+      mockAdminService.getEmployerVerificationHistory.mockResolvedValue([
+        { id: 'ver-1', status: 'verified', createdAt: new Date().toISOString() },
+      ]);
+      const res = await controller.getEmployerVerificationHistory('emp-1');
+      expect(res.employerId).toBe('emp-1');
+      expect(res.count).toBe(1);
+      expect(res.history).toHaveLength(1);
     });
   });
 
@@ -308,5 +321,35 @@ describe('AdminController', () => {
       expect(seeded.seededCount).toBe(20);
     });
   });
+
+  describe('Audit Logs & Traceability', () => {
+    it('should list audit logs with filters', async () => {
+      mockAdminService.listAuditLogs.mockResolvedValue({
+        count: 1,
+        total: 1,
+        page: 1,
+        limit: 20,
+        totalPages: 1,
+        logs: [{ id: 'audit-1', action: 'USER_SUSPEND' }],
+      });
+      const res = await controller.listAuditLogs({ action: 'USER_SUSPEND' });
+      expect(res.count).toBe(1);
+      expect(mockAdminService.listAuditLogs).toHaveBeenCalledWith({ action: 'USER_SUSPEND' });
+    });
+
+    it('should get entity audit trail', async () => {
+      mockAdminService.getEntityAuditTrail.mockResolvedValue({
+        targetEntity: 'User',
+        targetId: 'user-1',
+        totalActions: 1,
+        trail: [{ id: 'audit-1', action: 'USER_SUSPEND' }],
+      });
+      const res = await controller.getEntityAuditTrail('User', 'user-1');
+      expect(res.targetEntity).toBe('User');
+      expect(res.trail).toHaveLength(1);
+      expect(mockAdminService.getEntityAuditTrail).toHaveBeenCalledWith('User', 'user-1');
+    });
+  });
 });
+
 

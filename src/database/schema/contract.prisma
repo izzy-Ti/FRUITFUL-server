@@ -271,3 +271,22 @@ model ControlledData {
   @@index([category])
   @@index([isActive])
 }
+
+model AuditLog {
+  id           String   @id
+  adminId      String
+  adminEmail   String?
+  action       String
+  targetEntity String
+  targetId     String
+  details      String?
+  ipAddress    String?
+  createdAt    TimestamptzString @default(now())
+
+  @@index([adminId])
+  @@index([action])
+  @@index([targetEntity])
+  @@index([targetId])
+  @@index([createdAt])
+}
+

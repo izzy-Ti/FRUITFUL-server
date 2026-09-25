@@ -21,6 +21,7 @@ import {
   ModerateJobDto,
   RejectJobDto,
   ModeratePortfolioDto,
+  QueryAuditLogsDto,
 } from './dto/index.js';
 import { ModerateTalentDto } from '../job-seekers/dto/index.js';
 import { AuthGuard } from '../auth/guards/auth.guard.js';
@@ -117,6 +118,16 @@ export class AdminController {
   @Get('employers/:id')
   async getEmployerById(@Param('id') id: string) {
     return this.adminService.getEmployerById(id);
+  }
+
+  @Get('employers/:id/verification-history')
+  async getEmployerVerificationHistory(@Param('id') id: string) {
+    const history = await this.adminService.getEmployerVerificationHistory(id);
+    return {
+      employerId: id,
+      count: history.length,
+      history,
+    };
   }
 
   @Patch('employers/:id/verify')
@@ -426,5 +437,23 @@ export class AdminController {
   async seedControlledData() {
     return this.adminService.seedControlledData();
   }
+
+  // ==========================================
+  // AUDIT LOGS & TRACEABILITY
+  // ==========================================
+
+  @Get('audit-logs')
+  async listAuditLogs(@Query() query: QueryAuditLogsDto) {
+    return this.adminService.listAuditLogs(query);
+  }
+
+  @Get('audit-logs/entity/:targetEntity/:targetId')
+  async getEntityAuditTrail(
+    @Param('targetEntity') targetEntity: string,
+    @Param('targetId') targetId: string,
+  ) {
+    return this.adminService.getEntityAuditTrail(targetEntity, targetId);
+  }
 }
+
 

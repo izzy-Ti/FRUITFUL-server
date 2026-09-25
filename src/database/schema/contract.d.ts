@@ -34,7 +34,7 @@ import type {
 } from '@prisma/orm-postgres/contract/types';
 
 export type StorageHash =
-  StorageHashBase<'fe3bd033d0f79cd635ddc3bf27eb533e262d73d2edf624c34cb6ce443b09baf1'>;
+  StorageHashBase<'f509bcc1cbd47c2fa11bcbb9cbf8d4baeeb5805d96cf17c5ac3468036fbae47e'>;
 export type ExecutionHash =
   ExecutionHashBase<'b459a77e709fed15183108e2c3205488b7ef89e6e19d2802c7283b1deaee9036'>;
 export type ProfileHash =
@@ -252,6 +252,17 @@ export type FieldOutputTypes = {
       readonly notes: CodecTypes['pg/text@1']['output'] | null;
       readonly createdAt: CodecTypes['pg/timestamptz-string@1']['output'];
     };
+    readonly AuditLog: {
+      readonly id: CodecTypes['pg/text@1']['output'];
+      readonly adminId: CodecTypes['pg/text@1']['output'];
+      readonly adminEmail: CodecTypes['pg/text@1']['output'] | null;
+      readonly action: CodecTypes['pg/text@1']['output'];
+      readonly targetEntity: CodecTypes['pg/text@1']['output'];
+      readonly targetId: CodecTypes['pg/text@1']['output'];
+      readonly details: CodecTypes['pg/text@1']['output'] | null;
+      readonly ipAddress: CodecTypes['pg/text@1']['output'] | null;
+      readonly createdAt: CodecTypes['pg/timestamptz-string@1']['output'];
+    };
     readonly Category: {
       readonly id: CodecTypes['pg/text@1']['output'];
       readonly name: CodecTypes['pg/text@1']['output'];
@@ -453,6 +464,17 @@ export type FieldInputTypes = {
       readonly changedById: CodecTypes['pg/text@1']['input'] | null;
       readonly changedByRole: CodecTypes['pg/text@1']['input'] | null;
       readonly notes: CodecTypes['pg/text@1']['input'] | null;
+      readonly createdAt: CodecTypes['pg/timestamptz-string@1']['input'];
+    };
+    readonly AuditLog: {
+      readonly id: CodecTypes['pg/text@1']['input'];
+      readonly adminId: CodecTypes['pg/text@1']['input'];
+      readonly adminEmail: CodecTypes['pg/text@1']['input'] | null;
+      readonly action: CodecTypes['pg/text@1']['input'];
+      readonly targetEntity: CodecTypes['pg/text@1']['input'];
+      readonly targetId: CodecTypes['pg/text@1']['input'];
+      readonly details: CodecTypes['pg/text@1']['input'] | null;
+      readonly ipAddress: CodecTypes['pg/text@1']['input'] | null;
       readonly createdAt: CodecTypes['pg/timestamptz-string@1']['input'];
     };
     readonly Category: {
@@ -658,6 +680,17 @@ export type StorageColumnTypes = {
       readonly notes: CodecTypes['pg/text@1']['output'] | null;
       readonly previousStatus: CodecTypes['pg/text@1']['output'] | null;
     };
+    readonly auditLog: {
+      readonly action: CodecTypes['pg/text@1']['output'];
+      readonly adminEmail: CodecTypes['pg/text@1']['output'] | null;
+      readonly adminId: CodecTypes['pg/text@1']['output'];
+      readonly createdAt: CodecTypes['pg/timestamptz-string@1']['output'];
+      readonly details: CodecTypes['pg/text@1']['output'] | null;
+      readonly id: CodecTypes['pg/text@1']['output'];
+      readonly ipAddress: CodecTypes['pg/text@1']['output'] | null;
+      readonly targetEntity: CodecTypes['pg/text@1']['output'];
+      readonly targetId: CodecTypes['pg/text@1']['output'];
+    };
     readonly category: {
       readonly createdAt: CodecTypes['pg/timestamptz-string@1']['output'];
       readonly description: CodecTypes['pg/text@1']['output'] | null;
@@ -860,6 +893,17 @@ export type StorageColumnInputTypes = {
       readonly newStatus: CodecTypes['pg/text@1']['input'];
       readonly notes: CodecTypes['pg/text@1']['input'] | null;
       readonly previousStatus: CodecTypes['pg/text@1']['input'] | null;
+    };
+    readonly auditLog: {
+      readonly action: CodecTypes['pg/text@1']['input'];
+      readonly adminEmail: CodecTypes['pg/text@1']['input'] | null;
+      readonly adminId: CodecTypes['pg/text@1']['input'];
+      readonly createdAt: CodecTypes['pg/timestamptz-string@1']['input'];
+      readonly details: CodecTypes['pg/text@1']['input'] | null;
+      readonly id: CodecTypes['pg/text@1']['input'];
+      readonly ipAddress: CodecTypes['pg/text@1']['input'] | null;
+      readonly targetEntity: CodecTypes['pg/text@1']['input'];
+      readonly targetId: CodecTypes['pg/text@1']['input'];
     };
     readonly category: {
       readonly createdAt: CodecTypes['pg/timestamptz-string@1']['input'];
@@ -1281,6 +1325,18 @@ export namespace Models {
     updatedAt: CodecTypes['pg/timestamptz-string@1']['output'];
     readonly [RelationKeys]?: never;
   };
+  export type public_AuditLog = {
+    id: CodecTypes['pg/text@1']['output'];
+    adminId: CodecTypes['pg/text@1']['output'];
+    adminEmail: CodecTypes['pg/text@1']['output'] | null;
+    action: CodecTypes['pg/text@1']['output'];
+    targetEntity: CodecTypes['pg/text@1']['output'];
+    targetId: CodecTypes['pg/text@1']['output'];
+    details: CodecTypes['pg/text@1']['output'] | null;
+    ipAddress: CodecTypes['pg/text@1']['output'] | null;
+    createdAt: CodecTypes['pg/timestamptz-string@1']['output'];
+    readonly [RelationKeys]?: never;
+  };
 }
 
 export declare const models: {
@@ -1300,6 +1356,7 @@ export declare const models: {
     ApplicationStatusHistory: Models.public_ApplicationStatusHistory;
     Category: Models.public_Category;
     ControlledData: Models.public_ControlledData;
+    AuditLog: Models.public_AuditLog;
   };
 };
 
@@ -1395,6 +1452,91 @@ type ContractBase = Omit<
                   };
                 },
               ];
+            };
+            readonly auditLog: {
+              columns: {
+                readonly id: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: false;
+                };
+                readonly adminId: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: false;
+                };
+                readonly adminEmail: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: true;
+                };
+                readonly action: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: false;
+                };
+                readonly targetEntity: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: false;
+                };
+                readonly targetId: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: false;
+                };
+                readonly details: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: true;
+                };
+                readonly ipAddress: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: true;
+                };
+                readonly createdAt: {
+                  readonly nativeType: 'timestamptz';
+                  readonly codecId: 'pg/timestamptz-string@1';
+                  readonly nullable: false;
+                  readonly default: { readonly kind: 'function'; readonly expression: 'now()' };
+                };
+              };
+              primaryKey: { readonly columns: readonly ['id'] };
+              uniques: readonly [];
+              indexes: readonly [
+                {
+                  readonly name: 'auditLog_adminId_idx_530179db';
+                  readonly prefix: 'auditLog_adminId_idx';
+                  readonly columns: readonly ['adminId'];
+                  readonly unique: false;
+                },
+                {
+                  readonly name: 'auditLog_action_idx_cd0d2116';
+                  readonly prefix: 'auditLog_action_idx';
+                  readonly columns: readonly ['action'];
+                  readonly unique: false;
+                },
+                {
+                  readonly name: 'auditLog_targetEntity_idx_9bd77954';
+                  readonly prefix: 'auditLog_targetEntity_idx';
+                  readonly columns: readonly ['targetEntity'];
+                  readonly unique: false;
+                },
+                {
+                  readonly name: 'auditLog_targetId_idx_9852d518';
+                  readonly prefix: 'auditLog_targetId_idx';
+                  readonly columns: readonly ['targetId'];
+                  readonly unique: false;
+                },
+                {
+                  readonly name: 'auditLog_createdAt_idx_9575dbd7';
+                  readonly prefix: 'auditLog_createdAt_idx';
+                  readonly columns: readonly ['createdAt'];
+                  readonly unique: false;
+                },
+              ];
+              foreignKeys: readonly [];
             };
             readonly category: {
               columns: {
@@ -2788,6 +2930,7 @@ type ContractBase = Omit<
       readonly namespace: 'public' & NamespaceId;
       readonly model: 'ControlledData';
     };
+    readonly auditLog: { readonly namespace: 'public' & NamespaceId; readonly model: 'AuditLog' };
   };
   readonly domain: {
     readonly namespaces: {
@@ -2856,6 +2999,65 @@ type ContractBase = Omit<
                 readonly changedById: { readonly column: 'changedById' };
                 readonly changedByRole: { readonly column: 'changedByRole' };
                 readonly notes: { readonly column: 'notes' };
+                readonly createdAt: { readonly column: 'createdAt' };
+              };
+            };
+          };
+          readonly AuditLog: {
+            readonly fields: {
+              readonly id: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly adminId: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly adminEmail: {
+                readonly nullable: true;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly action: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly targetEntity: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly targetId: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly details: {
+                readonly nullable: true;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly ipAddress: {
+                readonly nullable: true;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly createdAt: {
+                readonly nullable: false;
+                readonly type: {
+                  readonly kind: 'scalar';
+                  readonly codecId: 'pg/timestamptz-string@1';
+                };
+              };
+            };
+            readonly relations: Record<string, never>;
+            readonly storage: {
+              readonly table: 'auditLog';
+              readonly namespaceId: 'public';
+              readonly fields: {
+                readonly id: { readonly column: 'id' };
+                readonly adminId: { readonly column: 'adminId' };
+                readonly adminEmail: { readonly column: 'adminEmail' };
+                readonly action: { readonly column: 'action' };
+                readonly targetEntity: { readonly column: 'targetEntity' };
+                readonly targetId: { readonly column: 'targetId' };
+                readonly details: { readonly column: 'details' };
+                readonly ipAddress: { readonly column: 'ipAddress' };
                 readonly createdAt: { readonly column: 'createdAt' };
               };
             };

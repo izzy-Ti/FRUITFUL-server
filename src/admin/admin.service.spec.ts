@@ -82,6 +82,7 @@ describe('AdminService', () => {
       chain.first = vi.fn().mockResolvedValue(defaultItem);
       chain.update = vi.fn().mockResolvedValue(defaultItem);
       chain.delete = vi.fn().mockResolvedValue({});
+      chain.create = vi.fn().mockImplementation((val: any) => Promise.resolve({ id: 'audit-1', ...val, createdAt: new Date().toISOString() }));
       return chain;
     };
 
@@ -94,6 +95,17 @@ describe('AdminService', () => {
             Job: createMockChain(mockJob),
             JobSeekerProfile: createMockChain(mockJobSeekerProfile),
             PortfolioProject: createMockChain(mockPortfolioProject),
+            AuditLog: createMockChain({
+              id: 'audit-1',
+              adminId: 'admin-1',
+              adminEmail: 'admin@fruitful.com',
+              action: 'USER_SUSPEND',
+              targetEntity: 'User',
+              targetId: 'user-1',
+              details: JSON.stringify({ reason: 'Terms violation' }),
+              ipAddress: '127.0.0.1',
+              createdAt: new Date().toISOString(),
+            }),
             JobApplication: createMockChain({
               id: 'app-1',
               jobId: 'job-1',
@@ -416,6 +428,94 @@ describe('AdminService', () => {
       expect(list).toHaveLength(1);
       const seeded = await service.seedControlledData();
       expect(seeded.seededCount).toBe(20);
+    });
+  });
+
+  describe('Audit Logging & Traceability', () => {
+    it('should create an audit record directly', async () => {
+      const log = await service.createAuditRecord({
+        adminId: 'admin-1',
+        action: 'USER_SUSPEND',
+        targetEntity: 'User',
+        targetId: 'user-1',
+        details: { reason: 'Policy violation' },
+      });
+      expect(log).toBeDefined();
+      expect(mockPrismaService.client.orm.public.AuditLog.create).toHaveBeenCalled();
+    });
+
+    it('should list audit logs with pagination and filters', async () => {
+      const res = await service.listAuditLogs({
+        action: 'USER_SUSPEND',
+        page: 1,
+        limit: 10,
+      });
+      expect(res.logs).toHaveLength(1);
+      expect(res.total).toBe(1);
+      expect(res.logs[0].action).toBe('USER_SUSPEND');
+    });
+
+    it('should retrieve audit trail for a specific target entity', async () => {
+      const res = await service.getEntityAuditTrail('User', 'user-1');
+      expect(res.targetEntity).toBe('User');
+      expect(res.targetId).toBe('user-1');
+      expect(res.trail).toHaveLength(1);
+    });
+
+    it('should retrieve employer verification history', async () => {
+      const history = await service.getEmployerVerificationHistory('emp-1');
+      expect(history).toHaveLength(1);
+      expect(mockEmployersService.getVerificationHistory).toHaveBeenCalledWith('emp-1');
+    });
+
+    it('should produce audit record on suspendUser', async () => {
+      await service.suspendUser('admin-1', 'user-1', { reason: 'Fraud' });
+      expect(mockPrismaService.client.orm.public.AuditLog.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          adminId: 'admin-1',
+          action: 'USER_SUSPEND',
+          targetEntity: 'User',
+          targetId: 'user-1',
+        }),
+      );
+    });
+
+    it('should produce audit record on verifyEmployer', async () => {
+      await service.verifyEmployer('admin-1', 'emp-1', 'verified');
+      expect(mockPrismaService.client.orm.public.AuditLog.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          adminId: 'admin-1',
+          action: 'EMPLOYER_VERIFY',
+          targetEntity: 'EmployerProfile',
+          targetId: 'emp-1',
+        }),
+      );
+    });
+
+    it('should produce audit record on approveJob', async () => {
+      await service.approveJob('admin-1', 'job-1');
+      expect(mockPrismaService.client.orm.public.AuditLog.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          adminId: 'admin-1',
+          action: 'JOB_APPROVE',
+          targetEntity: 'Job',
+          targetId: 'job-1',
+        }),
+      );
+    });
+
+    it('should produce audit record on moderateTalentProfile', async () => {
+      await service.moderateTalentProfile('admin-1', 'profile-1', {
+        approvalStatus: 'approved' as any,
+      });
+      expect(mockPrismaService.client.orm.public.AuditLog.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          adminId: 'admin-1',
+          action: 'TALENT_MODERATE',
+          targetEntity: 'JobSeekerProfile',
+          targetId: 'profile-1',
+        }),
+      );
     });
   });
 });

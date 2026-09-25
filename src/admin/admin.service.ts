@@ -4,6 +4,7 @@ import {
   BadRequestException,
   Logger,
 } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
 import { PrismaService } from '../database/prisma.service.js';
 import { EmployersService } from '../employers/employers.service.js';
 import { JobsService } from '../jobs/jobs.service.js';
@@ -185,6 +186,14 @@ export class AdminService {
       .where({ id: targetUserId })
       .update({ role: dto.role });
 
+    await this.createAuditRecord({
+      adminId: adminUserId,
+      action: 'USER_ROLE_CHANGE',
+      targetEntity: 'User',
+      targetId: targetUserId,
+      details: { email: user.email, previousRole: user.role, newRole: dto.role },
+    });
+
     this.logger.log(`Admin ${adminUserId} updated role for user ${targetUserId} to ${dto.role}`);
 
     return {
@@ -223,6 +232,14 @@ export class AdminService {
         suspensionReason: dto.reason,
       });
 
+    await this.createAuditRecord({
+      adminId: adminUserId,
+      action: 'USER_SUSPEND',
+      targetEntity: 'User',
+      targetId: targetUserId,
+      details: { email: user.email, reason: dto.reason },
+    });
+
     this.logger.log(`Admin ${adminUserId} suspended user ${targetUserId}. Reason: ${dto.reason}`);
 
     return {
@@ -255,6 +272,14 @@ export class AdminService {
         suspendedAt: null,
         suspensionReason: null,
       });
+
+    await this.createAuditRecord({
+      adminId: adminUserId,
+      action: 'USER_REACTIVATE',
+      targetEntity: 'User',
+      targetId: targetUserId,
+      details: { email: user.email },
+    });
 
     this.logger.log(`Admin ${adminUserId} reactivated user ${targetUserId}`);
 
@@ -298,6 +323,13 @@ export class AdminService {
   }
 
   /**
+   * Retrieve verification audit trail for an employer.
+   */
+  async getEmployerVerificationHistory(employerId: string) {
+    return this.employersService.getVerificationHistory(employerId);
+  }
+
+  /**
    * Verify or reject an employer organization.
    */
   async verifyEmployer(
@@ -306,11 +338,21 @@ export class AdminService {
     status: 'verified' | 'rejected',
     rejectionReason?: string,
   ) {
-    return this.employersService.updateVerificationStatus(
+    const result = await this.employersService.updateVerificationStatus(
       employerId,
       { status, rejectionReason },
       adminUserId,
     );
+
+    await this.createAuditRecord({
+      adminId: adminUserId,
+      action: status === 'verified' ? 'EMPLOYER_VERIFY' : 'EMPLOYER_REJECT',
+      targetEntity: 'EmployerProfile',
+      targetId: employerId,
+      details: { status, rejectionReason: rejectionReason || null },
+    });
+
+    return result;
   }
 
   // ==========================================
@@ -349,6 +391,14 @@ export class AdminService {
 
     this.logger.log(`Admin ${adminUserId} approved job ${jobId}`);
 
+    await this.createAuditRecord({
+      adminId: adminUserId,
+      action: 'JOB_APPROVE',
+      targetEntity: 'Job',
+      targetId: jobId,
+      details: { title: existing.title, adminNotes: dto?.adminNotes || 'Approved by administrator.' },
+    });
+
     const updated = await this.prisma.client.orm.public.Job
       .where({ id: jobId })
       .first();
@@ -380,6 +430,14 @@ export class AdminService {
 
     this.logger.log(`Admin ${adminUserId} rejected job ${jobId}. Reason: ${dto.reason}`);
 
+    await this.createAuditRecord({
+      adminId: adminUserId,
+      action: 'JOB_REJECT',
+      targetEntity: 'Job',
+      targetId: jobId,
+      details: { title: existing.title, reason: dto.reason },
+    });
+
     return this.jobsService.getJobById(jobId);
   }
 
@@ -387,7 +445,16 @@ export class AdminService {
    * Remove a job listing permanently.
    */
   async removeJob(adminUserId: string, jobId: string) {
-    return this.jobsService.deleteJob(adminUserId, jobId, true);
+    const result = await this.jobsService.deleteJob(adminUserId, jobId, true);
+
+    await this.createAuditRecord({
+      adminId: adminUserId,
+      action: 'JOB_REMOVE',
+      targetEntity: 'Job',
+      targetId: jobId,
+    });
+
+    return result;
   }
 
   // ==========================================
@@ -408,7 +475,17 @@ export class AdminService {
    * Moderate a candidate profile (approve, reject, pending).
    */
   async moderateTalentProfile(adminUserId: string, profileId: string, dto: ModerateTalentDto) {
-    return this.jobSeekersService.moderateTalentProfile(adminUserId, profileId, dto);
+    const result = await this.jobSeekersService.moderateTalentProfile(adminUserId, profileId, dto);
+
+    await this.createAuditRecord({
+      adminId: adminUserId,
+      action: 'TALENT_MODERATE',
+      targetEntity: 'JobSeekerProfile',
+      targetId: profileId,
+      details: { approvalStatus: dto.approvalStatus, adminNotes: dto.adminNotes || null },
+    });
+
+    return result;
   }
 
   /**
@@ -482,6 +559,14 @@ export class AdminService {
 
     this.logger.log(`Admin ${adminUserId} moderated portfolio project ${projectId} to "${dto.status}"`);
 
+    await this.createAuditRecord({
+      adminId: adminUserId,
+      action: 'PORTFOLIO_MODERATE',
+      targetEntity: 'PortfolioProject',
+      targetId: projectId,
+      details: { title: project.title, status: dto.status, adminNotes: dto.adminNotes || null },
+    });
+
     return {
       id: project.id,
       title: project.title,
@@ -508,6 +593,14 @@ export class AdminService {
       .delete();
 
     this.logger.log(`Admin ${adminUserId} removed portfolio project ${projectId}`);
+
+    await this.createAuditRecord({
+      adminId: adminUserId,
+      action: 'PORTFOLIO_REMOVE',
+      targetEntity: 'PortfolioProject',
+      targetId: projectId,
+      details: { title: project.title },
+    });
 
     return {
       success: true,
@@ -1214,5 +1307,149 @@ export class AdminService {
   async seedControlledData() {
     return this.controlledDataService.seedStandardData();
   }
+
+  // ==========================================
+  // AUDIT LOGGING & TRACEABILITY
+  // ==========================================
+
+  /**
+   * Produce an immutable audit log record for sensitive administrative actions.
+   */
+  async createAuditRecord(data: {
+    adminId: string;
+    adminEmail?: string;
+    action: string;
+    targetEntity: string;
+    targetId: string;
+    details?: any;
+    ipAddress?: string;
+  }) {
+    try {
+      const detailsStr = data.details
+        ? typeof data.details === 'string'
+          ? data.details
+          : JSON.stringify(data.details)
+        : null;
+
+      const record = await this.prisma.client.orm.public.AuditLog.create({
+        id: randomUUID(),
+        adminId: data.adminId,
+        adminEmail: data.adminEmail || null,
+        action: data.action,
+        targetEntity: data.targetEntity,
+        targetId: data.targetId,
+        details: detailsStr,
+        ipAddress: data.ipAddress || null,
+      });
+
+      this.logger.log(`[AUDIT] Action: ${data.action} on ${data.targetEntity}#${data.targetId} by ${data.adminId}`);
+      return record;
+    } catch (err: any) {
+      this.logger.error(`Failed to create audit log for ${data.action}: ${err?.message || err}`);
+      return null;
+    }
+  }
+
+  /**
+   * List audit logs with comprehensive filtering and pagination.
+   */
+  async listAuditLogs(query?: {
+    action?: string;
+    targetEntity?: string;
+    targetId?: string;
+    adminId?: string;
+    startDate?: string;
+    endDate?: string;
+    page?: number;
+    limit?: number;
+  }) {
+    let collection = this.prisma.client.orm.public.AuditLog;
+
+    if (query?.action) {
+      collection = collection.where((a) => a.action.eq(query.action!));
+    }
+
+    if (query?.targetEntity) {
+      collection = collection.where((a) => a.targetEntity.eq(query.targetEntity!));
+    }
+
+    if (query?.targetId) {
+      collection = collection.where((a) => a.targetId.eq(query.targetId!));
+    }
+
+    if (query?.adminId) {
+      collection = collection.where((a) => a.adminId.eq(query.adminId!));
+    }
+
+    const allLogs = await collection
+      .orderBy((a) => a.createdAt.desc())
+      .all();
+
+    const start = query?.startDate ? new Date(query.startDate) : null;
+    const end = query?.endDate ? new Date(query.endDate) : null;
+
+    let filtered = allLogs;
+    if (start || end) {
+      filtered = filtered.filter((log) => {
+        const d = new Date(log.createdAt);
+        if (start && d < start) return false;
+        if (end && d > end) return false;
+        return true;
+      });
+    }
+
+    const page = Math.max(1, Number(query?.page) || 1);
+    const limit = Math.max(1, Math.min(100, Number(query?.limit) || 20));
+    const total = filtered.length;
+    const offset = (page - 1) * limit;
+    const paginated = filtered.slice(offset, offset + limit);
+
+    const parsedLogs = paginated.map((log) => ({
+      ...log,
+      details: log.details ? this.safeParseJson(log.details) : null,
+    }));
+
+    return {
+      count: parsedLogs.length,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+      logs: parsedLogs,
+    };
+  }
+
+  /**
+   * Retrieve audit and verification history for a specific target entity.
+   */
+  async getEntityAuditTrail(targetEntity: string, targetId: string) {
+    const logs = await this.prisma.client.orm.public.AuditLog
+      .where((a) => a.targetEntity.eq(targetEntity))
+      .where((a) => a.targetId.eq(targetId))
+      .orderBy((a) => a.createdAt.desc())
+      .all();
+
+    return {
+      targetEntity,
+      targetId,
+      totalActions: logs.length,
+      trail: logs.map((log) => ({
+        ...log,
+        details: log.details ? this.safeParseJson(log.details) : null,
+      })),
+    };
+  }
+
+  /**
+   * Helper to safely parse JSON strings without throwing.
+   */
+  private safeParseJson(jsonStr: string) {
+    try {
+      return JSON.parse(jsonStr);
+    } catch {
+      return jsonStr;
+    }
+  }
 }
+
 
